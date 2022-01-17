@@ -1,0 +1,53 @@
+[package]
+name = "structured-note"
+version = "1.0.0"
+authors = ["Nexus Labs"]
+edition = "2018"
+description = "Contract for nexus structured note"
+license = "Apache-2.0"
+repository = "todo"
+homepage = "todo"
+documentation = "todo"
+
+exclude = [
+  # Those files are rust-optimizer artifacts. You might want to commit them for convenience but they should not be part of the source code publication.
+  "contract.wasm",
+  "hash.txt",
+]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+opt-level = 3
+debug = false
+rpath = false
+lto = true
+debug-assertions = false
+codegen-units = 1
+panic = 'abort'
+incremental = false
+overflow-checks = true
+
+[features]
+# for more explicit tests, cargo test --features=backtraces
+backtraces = ["cosmwasm-std/backtraces"]
+
+[dependencies]
+structured-note-package = { path = "../../packages/structured_note", default-features = false, version = "1.0.0"}
+protobuf = { version = "2.24.1", features = ["with-bytes"] }
+cw20 = { version = "0.8.1" }
+cosmwasm-std = { version = "0.16.1", features = ["iterator"] }
+cw-storage-plus = { version = "0.8.1" }
+schemars = "0.8.3"
+serde = { version = "1.0.126", default-features = false, features = ["derive"] }
+cosmwasm-bignumber = "2.2.0"
+terra-cosmwasm = { version = "2.2" }
+cw2 = "0.11"
+terraswap = "2.4.0"
+
+[dev-dependencies]
+cosmwasm-schema = { version = "0.16.0" }
+cosmwasm-storage = { version = "0.16.1", features = ["iterator"] }
