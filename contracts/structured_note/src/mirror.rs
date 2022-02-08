@@ -1,5 +1,5 @@
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{Addr, CosmosMsg, Deps, QueryRequest, Response, StdError, StdResult, SubMsg, to_binary, Uint128, WasmMsg, WasmQuery};
+use cosmwasm_std::{Addr, CosmosMsg, Deps, DepsMut, QueryRequest, Response, StdError, StdResult, SubMsg, to_binary, Uint128, WasmMsg, WasmQuery};
 use cosmwasm_storage::to_length_prefixed;
 use cw20::Cw20ExecuteMsg;
 use schemars::JsonSchema;
@@ -8,7 +8,7 @@ use terraswap::asset::{Asset, AssetInfo};
 
 use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg};
 
-use crate::state::{Config, DepositingState, load_config};
+use crate::state::{Config, DepositingState, load_config, load_depositing_state};
 use crate::SubmsgIds;
 
 pub fn query_mirror_ts_factory(deps: Deps) -> StdResult<String> {
@@ -67,8 +67,9 @@ pub fn query_cdp(deps: Deps, cdp_idx: Uint128) -> StdResult<CDPState> {
     }
 }
 
-pub fn open_cdp(deps: Deps, depositing_state: &DepositingState) -> StdResult<Response> {
+pub fn open_cdp(deps: DepsMut, received_aust_amount: Uint128) -> StdResult<Response> {
     let config = load_config(deps.storage)?;
+    let depositing_state = load_depositing_state(deps.storage)?;
 
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
@@ -76,12 +77,12 @@ pub fn open_cdp(deps: Deps, depositing_state: &DepositingState) -> StdResult<Res
                 contract_addr: config.aterra_addr.to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Send {
                     contract: config.mirror_mint_contract.to_string(),
-                    amount: depositing_state.amount_aust_to_collateral,
+                    amount: received_aust_amount,
                     msg: to_binary(&MirrorMintCW20HookMsg::OpenPosition {
                         asset_info: AssetInfo::Token {
                             contract_addr: depositing_state.masset_token.to_string()
                         },
-                        collateral_ratio,
+                        collateral_ratio: depositing_state.init_collateral_ratio,
                         short_params: None,
                     })?,
                 })?,
@@ -91,9 +92,9 @@ pub fn open_cdp(deps: Deps, depositing_state: &DepositingState) -> StdResult<Res
         ))
         .add_attributes(vec![
             ("action", "open_cdp"),
-            ("collateral_amount", depositing_state.amount_aust_to_collateral.to_string()),
+            ("collateral_amount", received_aust_amount.to_string()),
             ("masset_addr", depositing_state.masset_token.to_string()),
-            ("initial_collateral_ratio", depositing_state.collateral_rate.to_string()),
+            ("initial_collateral_ratio", depositing_state.init_collateral_ratio.to_string()),
         ]))
 }
 

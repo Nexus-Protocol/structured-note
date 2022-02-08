@@ -5,9 +5,11 @@ use cosmwasm_std::{
     Addr, Binary, CosmosMsg, Deps, DepsMut, entry_point, Env, MessageInfo, Reply, Response,
     StdError, StdResult, SubMsg, to_binary, WasmMsg,
 };
+use protobuf::Message;
 
 use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
+use crate::anchor::get_minted_amount_from_deposit_response;
 use crate::commands::{deposit_stable, validate_masset};
 use crate::mirror::{deposit_to_cdp, open_cdp, query_masset_config};
 use crate::state::{Config, DepositingState, load_config};
@@ -63,7 +65,9 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
     let submessage_enum = SubmsgIds::try_from(msg.id)?;
     match submessage_enum {
         SubmsgIds::OpenCDP => {
-            open_cdp()
+            let events = msg.result.unwrap().events;
+            let received_aust_amount = get_minted_amount_from_deposit_response(events)?;
+            open_cdp(deps, received_aust_amount.into())
         },
         SubmsgIds::DepositToCDP => {
             deposit_to_cdp()

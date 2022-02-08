@@ -1,5 +1,5 @@
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{Coin, CosmosMsg, DepsMut, Response, StdError, StdResult, SubMsg, to_binary, WasmMsg};
+use cosmwasm_std::{Coin, CosmosMsg, DepsMut, Event, Response, StdError, StdResult, SubMsg, to_binary, WasmMsg};
 
 use structured_note_package::anchor::AnchorMarketMsg;
 
@@ -43,14 +43,14 @@ pub fn deposit_stable(deps: DepsMut, depositing_state: &mut DepositingState, dep
             ])))
 }
 
-pub fn get_minted_amount_form_deposit_response(response: Response) -> StdResult<String> {
-    response.events
+pub fn get_minted_amount_from_deposit_response(events: Vec<Event>) -> StdResult<String> {
+    events
         .into_iter()
         .map(|event| event.attributes)
         .flatten()
         .find(|attr| attr.key == "mint_amount")
         .map(|attr| attr.value)
         .ok_or_else(|| {
-            StdError::generic_err("Fail to deposit UST to Anchor Money Market")
+            StdError::generic_err("Fail to parse Anchor Money Market deposit stable response")
         })
 }
