@@ -1,7 +1,7 @@
 [workspace]
 members = ["packages/*", "contracts/*"]
 
-[profile.release.package.basset-vault]
+[profile.release.package.structured-note]
 opt-level = 3
 debug = false
 debug-assertions = false
