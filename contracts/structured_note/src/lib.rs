@@ -6,6 +6,9 @@ pub mod state;
 mod anchor;
 mod mirror;
 mod terraswap;
+mod contract;
+mod commands;
+mod utils;
 
 pub enum SubmsgIds {
     OpenCDP,

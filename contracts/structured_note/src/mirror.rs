@@ -1,12 +1,12 @@
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{Addr, CosmosMsg, Deps, QueryRequest, Response, StdError, StdResult, SubMsg, to_binary, WasmMsg, WasmQuery};
+use cosmwasm_std::{Addr, CosmosMsg, Deps, QueryRequest, Response, StdError, StdResult, SubMsg, to_binary, Uint128, WasmMsg, WasmQuery};
 use cosmwasm_storage::to_length_prefixed;
 use cw20::Cw20ExecuteMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use terraswap::asset::{Asset, AssetInfo};
 
-use structured_note_package::mirror::{MirrorAssetConfigResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg};
+use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg};
 
 use crate::state::{Config, DepositingState, load_config};
 use crate::SubmsgIds;
@@ -43,6 +43,27 @@ pub fn query_masset_config(deps: Deps, masset_token: &Addr) -> StdResult<MirrorA
             ipo_params: a.ipo_params,
         }),
         Err(_) => Err(StdError::generic_err("Mirror asset config query failed".to_string()))
+    }
+}
+
+pub fn query_cdp(deps: Deps, cdp_idx: Uint128) -> StdResult<CDPState> {
+    let config = load_config(deps.storage)?;
+
+    let cdp: StdResult<MirrorCDPResponse> =
+        deps.querier.query(&QueryRequest::Wasm(WasmQuery::Raw {
+            contract_addr: config.mirror_mint_contract.to_string(),
+            key: Binary::from(concat(
+                &to_length_prefixed(b"position"),
+                cdp_idx.as_bytes(),
+            )),
+        }));
+
+    match cdp {
+        Ok(cdp) => Ok(CDPState {
+            collateral_amount: cdp.collateral.amount,
+            loan_amount: cdp.asset.amount,
+        }),
+        Err(_) => Err(StdError::generic_err("Mirror position query failed".to_string()))
     }
 }
 

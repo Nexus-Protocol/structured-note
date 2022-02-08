@@ -26,35 +26,32 @@ pub struct Config {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 struct CDP {
-    idx: Uint256,
-    masset_token: Addr,
-    users: Vec<Addr>,
+    pub idx: Uint128,
+    pub masset_token: Addr,
+    pub users: Vec<Addr>,
 }
 
 pub struct DepositingState {
-    pub cdp_idx: Option<Uint128>,
+    pub cdp_idx: Uint128,
     pub farmer_addr: Addr,
     pub masset_token: Addr,
-    pub collateral_rate: Decimal,
-    pub amount_to_deposit_to_anc: Uint128,
-    pub masset_amount_to_sell: Uint128,
-    pub amount_aust_to_collateral: Uint128,
+    pub init_collateral_ratio: Decimal,
     pub max_iteration_index: u8,
     pub cur_iteration_index: u8,
-    pub initial_cdp_collateral_amount: Uint256,
-    pub initial_cdp_loan_amount: Uint256,
+    pub initial_cdp_collateral_amount: Uint128,
+    pub initial_cdp_loan_amount: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 struct Position {
-    user_addr: Addr,
-    masset_token: Addr,
-    cdp_idx: Uint128,
-    leverage_iter_amount: Uint64,
-    total_debt_amount: Uint256,
-    total_collateral_amount: Uint256,
-    final_aust_amount: Uint256,
-    liquidation_ltv: Decimal256,
+    pub user_addr: Addr,
+    pub masset_token: Addr,
+    pub cdp_idx: Uint128,
+    pub leverage_iter_amount: u8,
+    pub total_debt_amount: Uint256,
+    pub total_collateral_amount: Uint256,
+    pub final_aust_amount: Uint256,
+    pub liquidation_ltv: Decimal256,
 }
 
 pub fn load_config(storage: &dyn Storage) -> StdResult<Config> {
@@ -116,6 +113,22 @@ pub fn remove_position(storage: &mut dyn Storage, user_addr: &Addr, masset_token
     KEY_POSITIONS.remove(storage: &mut dyn Storage, (user_addr, masset_token))
 }
 
+impl DepositingState {
+    pub fn template(farmer_addr: Addr, masset_token: Addr, init_collateral_ratio: Option<Decimal>, leverage_iter_amount: Option<u8>) -> DepositingState {
+        DepositingState {
+            cdp_idx: Default::default(),
+            farmer_addr,
+            masset_token,
+            init_collateral_ratio: init_collateral_ratio.unwrap_or_else(Decimal::zero()),
+            max_iteration_index: leverage_iter_amount.unwrap_or_else(0),
+            masset_amount_to_sell: Default::default(),
+            amount_aust_to_collateral: Default::default(),
+            cur_iteration_index: 0,
+            initial_cdp_collateral_amount: Default::default(),
+            initial_cdp_loan_amount: Default::default(),
+        }
+    }
+}
 
 
 

@@ -1,7 +1,7 @@
-use cosmwasm_std::{Decimal, Uint128};
+use cosmwasm_std::{Addr, Decimal, Uint128};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use terraswap::asset::{Asset, AssetInfo};
+use terraswap::asset::{Asset, AssetInfo, AssetRaw};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -53,4 +53,18 @@ pub struct IPOParams {
     pub mint_end: u64,
     pub pre_ipo_price: Decimal,
     pub min_collateral_ratio_after_ipo: Decimal,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct MirrorCDPResponse {
+    pub idx: Uint128,
+    pub owner: Addr,
+    pub collateral: AssetRaw,
+    pub asset: AssetRaw,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct CDPState {
+    pub collateral_amount: Uint128,
+    pub loan_amount: Uint128,
 }
