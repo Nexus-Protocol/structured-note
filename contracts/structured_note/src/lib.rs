@@ -4,6 +4,7 @@ use cosmwasm_std::StdError;
 
 pub mod state;
 mod anchor;
+mod mirror;
 
 pub enum SubmsgIds {
     OpenCDP,

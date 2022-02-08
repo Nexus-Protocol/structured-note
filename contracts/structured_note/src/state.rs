@@ -34,7 +34,10 @@ struct CDP {
 pub struct DepositingState {
     pub cdp_idx: Option<Uint128>,
     pub farmer_addr: Addr,
+    pub masset_token: Addr,
+    pub collateral_rate: Decimal,
     pub amount_to_deposit_to_anc: Uint128,
+    pub amount_aust_to_collateral: Uint128,
     pub max_iteration_index: u8,
     pub cur_iteration_index: u8,
     pub initial_cdp_collateral_amount: Uint256,
