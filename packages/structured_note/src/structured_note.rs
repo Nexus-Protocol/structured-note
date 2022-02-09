@@ -11,7 +11,7 @@ pub enum ExecuteMsg {
     DepositStable {
         masset_token: String,
         leverage_iter_amount: Option<u8>,
-        initial_collateral_ratio: Option<Decimal>,
+        aim_collateral_ratio: Option<Decimal>,
     }
 }
 

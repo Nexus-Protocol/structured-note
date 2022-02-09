@@ -68,3 +68,36 @@ pub struct CDPState {
     pub collateral_amount: Uint128,
     pub loan_amount: Uint128,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MirrorCollateralOracleQueryMsg {
+    CollateralPrice {
+        asset: String,
+        block_height: Option<u64>,
+    },
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct MirrorCollateralPriceResponse {
+    pub asset: String,
+    pub rate: Decimal,
+    pub last_updated: u64,
+    pub multiplier: Decimal,
+    pub is_revoked: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub enum MirrorOracleQueryMsg {
+    Price {
+        base_asset: String,
+        quote_asset: String,
+    },
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct MirrorPriceResponse {
+    pub rate: Decimal,
+    pub last_updated_base: u64,
+    pub last_updated_quote: u64,
+}

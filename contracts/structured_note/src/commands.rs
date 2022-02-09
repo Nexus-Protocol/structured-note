@@ -31,10 +31,10 @@ pub fn deposit_stable(
         return Err(StdError::generic_err("Deposit amount is zero".to_string()));
     };
 
-    if deposit_state.init_collateral_ratio > 0.0 {
+    if deposit_state.aim_collateral_ratio > 0.0 {
         let min_collateral_ratio = decimal_multiplication(masset_config.min_collateral_ratio, config.min_over_collateralization);
-        if deposit_state.init_collateral_ratio < min_collateral_ratio {
-            return Err(StdError::generic_err("Initial collateral ration too low".to_string()));
+        if deposit_state.aim_collateral_ratio < min_collateral_ratio {
+            return Err(StdError::generic_err("Aim collateral ration too low".to_string()));
         } else {
             deposit_stable_inner(deps, depositing_state, deposit_amount);
         }
@@ -81,5 +81,3 @@ fn deposit_stable_inner(
     };
     anc_deposit_stable(deps, depositing_state, deposit_amount)
 }
-
-fn open_new_cdp(config: &Config, deposit_amount: Uint256, masset_token: &Addr, initial_collateral_ratio: Decimal) -> StdResult<Response> {}

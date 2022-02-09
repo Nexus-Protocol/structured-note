@@ -35,7 +35,7 @@ pub struct DepositingState {
     pub cdp_idx: Uint128,
     pub farmer_addr: Addr,
     pub masset_token: Addr,
-    pub init_collateral_ratio: Decimal,
+    pub aim_collateral_ratio: Decimal,
     pub max_iteration_index: u8,
     pub cur_iteration_index: u8,
     pub initial_cdp_collateral_amount: Uint128,
@@ -114,15 +114,13 @@ pub fn remove_position(storage: &mut dyn Storage, user_addr: &Addr, masset_token
 }
 
 impl DepositingState {
-    pub fn template(farmer_addr: Addr, masset_token: Addr, init_collateral_ratio: Option<Decimal>, leverage_iter_amount: Option<u8>) -> DepositingState {
+    pub fn template(farmer_addr: Addr, masset_token: Addr, aim_collateral_ratio: Option<Decimal>, leverage_iter_amount: Option<u8>) -> DepositingState {
         DepositingState {
             cdp_idx: Default::default(),
             farmer_addr,
             masset_token,
-            init_collateral_ratio: init_collateral_ratio.unwrap_or_else(Decimal::zero()),
+            aim_collateral_ratio: aim_collateral_ratio.unwrap_or_else(Decimal::zero()),
             max_iteration_index: leverage_iter_amount.unwrap_or_else(0),
-            masset_amount_to_sell: Default::default(),
-            amount_aust_to_collateral: Default::default(),
             cur_iteration_index: 0,
             initial_cdp_collateral_amount: Default::default(),
             initial_cdp_loan_amount: Default::default(),

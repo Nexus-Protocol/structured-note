@@ -1,17 +1,17 @@
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{Addr, CosmosMsg, Deps, DepsMut, QueryRequest, Response, StdError, StdResult, SubMsg, to_binary, Uint128, WasmMsg, WasmQuery};
+use cosmwasm_std::{Addr, CosmosMsg, Decimal, Deps, DepsMut, Event, QueryRequest, Response, StdError, StdResult, SubMsg, to_binary, Uint128, WasmMsg, WasmQuery};
 use cosmwasm_storage::to_length_prefixed;
 use cw20::Cw20ExecuteMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use terraswap::asset::{Asset, AssetInfo};
 
-use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg};
+use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorCollateralPriceResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg, MirrorOracleQueryMsg, MirrorPriceResponse};
 
 use crate::state::{Config, DepositingState, load_config, load_depositing_state};
 use crate::SubmsgIds;
 
-pub fn query_mirror_ts_factory(deps: Deps) -> StdResult<String> {
+pub fn query_mirror_mint_config(deps: Deps) -> StdResult<MirrorMintConfigResponse> {
     let config = load_config(deps.storage)?;
 
     let mirror_mint_config: MirrorMintConfigResponse =
@@ -19,7 +19,7 @@ pub fn query_mirror_ts_factory(deps: Deps) -> StdResult<String> {
             contract_addr: config.mirror_mint_contract.to_string(),
             key: Binary::from(b"config"),
         }))?;
-    Ok(mirror_mint_config.terraswap_factory)
+    Ok(mirror_mint_config)
 }
 
 pub fn query_masset_config(deps: Deps, masset_token: &Addr) -> StdResult<MirrorAssetConfigResponse> {
@@ -67,6 +67,28 @@ pub fn query_cdp(deps: Deps, cdp_idx: Uint128) -> StdResult<CDPState> {
     }
 }
 
+pub fn query_collateral_price(deps: Deps, collateral_oracle_addr: &Addr, aterra_addr: &Addr) -> StdResult<(Decimal, Decimal)> {
+    let res: MirrorCollateralPriceResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: collateral_oracle_addr.to_string(),
+        msg: to_binary(&CollateralOracleQueryMsg::CollateralPrice {
+            asset,
+            None,
+        })?,
+    }))?;
+    Ok((res.rate, res.multiplier))
+}
+
+pub fn query_asset_price(deps: Deps, oracle_addr: &Addr, asset_addr: &Addr, base_asset: String) -> StdResult<Decimal> {
+    let res: MirrorPriceResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: oracle_addr.to_string(),
+        msg: to_binary(&MirrorOracleQueryMsg::Price {
+            base_asset,
+            quote_asset: asset_addr.to_string(),
+        })?,
+    }))?;
+    Ok(res.rate)
+}
+
 pub fn open_cdp(deps: DepsMut, received_aust_amount: Uint128) -> StdResult<Response> {
     let config = load_config(deps.storage)?;
     let depositing_state = load_depositing_state(deps.storage)?;
@@ -82,7 +104,7 @@ pub fn open_cdp(deps: DepsMut, received_aust_amount: Uint128) -> StdResult<Respo
                         asset_info: AssetInfo::Token {
                             contract_addr: depositing_state.masset_token.to_string()
                         },
-                        collateral_ratio: depositing_state.init_collateral_ratio,
+                        collateral_ratio: depositing_state.aim_collateral_ratio,
                         short_params: None,
                     })?,
                 })?,
@@ -94,12 +116,13 @@ pub fn open_cdp(deps: DepsMut, received_aust_amount: Uint128) -> StdResult<Respo
             ("action", "open_cdp"),
             ("collateral_amount", received_aust_amount.to_string()),
             ("masset_addr", depositing_state.masset_token.to_string()),
-            ("initial_collateral_ratio", depositing_state.init_collateral_ratio.to_string()),
+            ("aim_collateral_ratio", depositing_state.aim_collateral_ratio.to_string()),
         ]))
 }
 
-pub fn deposit_to_cdp(deps: Deps, depositing_state: &DepositingState) -> StdResult<Response> {
+pub fn deposit_to_cdp(deps: DepsMut, received_aust_amount: Uint128) -> StdResult<Response> {
     let config = load_config(deps.storage)?;
+    let depositing_state = load_depositing_state(deps.storage)?;
 
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
@@ -107,19 +130,74 @@ pub fn deposit_to_cdp(deps: Deps, depositing_state: &DepositingState) -> StdResu
                 contract_addr: config.aterra_addr.to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Send {
                     contract: config.mirror_mint_contract.to_string(),
-                    amount: depositing_state.amount_aust_to_collateral,
+                    amount: received_aust_amount,
                     msg: to_binary(&MirrorMintCW20HookMsg::Deposit {
-                        position_idx: cdp_idx.into()
+                        position_idx: depositing_state.cdp_idx
                     })?,
                 })?,
                 funds: vec![],
             }),
-            SubmsgIds::SellAsset.id(),
+            SubmsgIds::MintAssetWithAimCollateralRatio.id(),
         ))
         .add_attributes(vec![
             ("action", "deposit_to_cdp"),
-            ("collateral_amount", depositing_state.amount_aust_to_collateral.to_string()),
+            ("collateral_amount", received_aust_amount.to_string()),
             ("masset_addr", depositing_state.masset_token.to_string()),
-            ("initial_collateral_ratio", depositing_state.collateral_rate.to_string()),
         ]))
 }
+
+pub fn get_minted_amount_from_open_cdp_response(events: Vec<Event>) -> StdResult<String> {
+    let mint_amount = events
+        .into_iter()
+        .map(|event| event.attributes)
+        .flatten()
+        .find(|attr| attr.key == "mint_amount")
+        .map(|attr| attr.value)
+        .ok_or_else(|| {
+            StdError::generic_err("Fail to parse Mirror Mint open position response")
+        })?;
+
+    let result = get_amount_from_asset_as_string(mint_amount);
+    return match result {
+        None => {
+            Err(StdError::generic_err("Fail to parse Mirror Mint open position response"))
+        }
+        Some(a) => {
+            Ok(a)
+        }
+    };
+}
+
+pub fn get_deposited_amount_from_deposit_to_cdp_response(events: Vec<Event>) -> StdResult<String> {
+    let deposit_amount = events
+        .into_iter()
+        .map(|event| event.attributes)
+        .flatten()
+        .find(|attr| attr.key == "deposit_amount")
+        .map(|attr| attr.value)
+        .ok_or_else(|| {
+            StdError::generic_err("Fail to parse Mirror Mint deposit to position response")
+        })?;
+
+    let result = get_amount_from_asset_as_string(deposit_amount);
+    return match result {
+        None => {
+            Err(StdError::generic_err("Fail to parse Mirror Mint deposit to position response"))
+        }
+        Some(a) => {
+            Ok(a)
+        }
+    };
+}
+
+// asset as string format is 0123terra1..... or 0123uusd(amount + token_addr or denom without spaces)
+// split mint_amount by the first met 't' or 'u'
+pub fn get_amount_from_asset_as_string(data: String) -> Option<String> {
+    for (i, c) in data.chars().enumerate() {
+        if c == 't' || c == 'u' {
+            return Some(data[..i].to_string());
+        }
+    }
+    None
+}
+

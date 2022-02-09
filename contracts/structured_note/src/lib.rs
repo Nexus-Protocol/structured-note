@@ -13,6 +13,7 @@ mod utils;
 pub enum SubmsgIds {
     OpenCDP,
     DepositToCDP,
+    MintAssetWithAimCollateralRatio,
     SellAsset,
     //last deposit to anchor and exit (no submsgs)
     Exit,
@@ -25,6 +26,7 @@ impl TryFrom<u64> for SubmsgIds {
         match v {
             x if x == SubmsgIds::OpenCDP.id() => Ok(SubmsgIds::OpenCDP),
             x if x == SubmsgIds::DepositToCDP.id() => Ok(SubmsgIds::DepositToCDP),
+            x if x == SubmsgIds::MintAssetWithAimCollateralRatio.id() => Ok(SubmsgIds::MintAssetWithAimCollateralRatio),
             x if x == SubmsgIds::SellAsset.id() => Ok(SubmsgIds::SellAsset),
             x if x == SubmsgIds::Exit.id() => Ok(SubmsgIds::Exit),
             unknown => Err(StdError::generic_err(format!(
