@@ -11,12 +11,10 @@ use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, Mirro
 use crate::state::{Config, DepositingState, load_config, load_depositing_state};
 use crate::SubmsgIds;
 
-pub fn query_mirror_mint_config(deps: Deps) -> StdResult<MirrorMintConfigResponse> {
-    let config = load_config(deps.storage)?;
-
+pub fn query_mirror_mint_config(mirror_mint_contract: String) -> StdResult<MirrorMintConfigResponse> {
     let mirror_mint_config: MirrorMintConfigResponse =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Raw {
-            contract_addr: config.mirror_mint_contract.to_string(),
+            contract_addr: mirror_mint_contract,
             key: Binary::from(b"config"),
         }))?;
     Ok(mirror_mint_config)
@@ -168,59 +166,3 @@ pub fn mint_to_cdp(depositing_state: &DepositingState, amount_to_mint: Uint128) 
             ("mint_amount", amount_to_mint.to_string()),
         ]))
 }
-
-pub fn get_minted_amount_from_open_cdp_response(events: Vec<Event>) -> StdResult<String> {
-    let mint_amount = events
-        .into_iter()
-        .map(|event| event.attributes)
-        .flatten()
-        .find(|attr| attr.key == "mint_amount")
-        .map(|attr| attr.value)
-        .ok_or_else(|| {
-            StdError::generic_err("Fail to parse Mirror Mint open position response")
-        })?;
-
-    let result = get_amount_from_asset_as_string(mint_amount);
-    return match result {
-        None => {
-            Err(StdError::generic_err("Fail to parse Mirror Mint open position response"))
-        }
-        Some(a) => {
-            Ok(a)
-        }
-    };
-}
-
-pub fn get_deposited_amount_from_deposit_to_cdp_response(events: Vec<Event>) -> StdResult<String> {
-    let deposit_amount = events
-        .into_iter()
-        .map(|event| event.attributes)
-        .flatten()
-        .find(|attr| attr.key == "deposit_amount")
-        .map(|attr| attr.value)
-        .ok_or_else(|| {
-            StdError::generic_err("Fail to parse Mirror Mint deposit to position response")
-        })?;
-
-    let result = get_amount_from_asset_as_string(deposit_amount);
-    return match result {
-        None => {
-            Err(StdError::generic_err("Fail to parse Mirror Mint deposit to position response"))
-        }
-        Some(a) => {
-            Ok(a)
-        }
-    };
-}
-
-// asset as string format is 0123terra1..... or 0123uusd(amount + token_addr or denom without spaces)
-// split mint_amount by the first met 't' or 'u'
-pub fn get_amount_from_asset_as_string(data: String) -> Option<String> {
-    for (i, c) in data.chars().enumerate() {
-        if c == 't' || c == 'u' {
-            return Some(data[..i].to_string());
-        }
-    }
-    None
-}
-

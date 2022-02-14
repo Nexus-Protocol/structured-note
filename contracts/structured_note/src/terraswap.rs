@@ -1,4 +1,4 @@
-use cosmwasm_std::{Addr, CosmosMsg, Deps, Env, QueryRequest, Response, StdResult, SubMsg, to_binary, Uint256, WasmMsg, WasmQuery};
+use cosmwasm_std::{Addr, CosmosMsg, Deps, Env, Event, QueryRequest, Response, StdError, StdResult, SubMsg, to_binary, Uint128, Uint256, WasmMsg, WasmQuery};
 use cw20::Cw20ExecuteMsg;
 use terraswap::asset::{AssetInfo, PairInfo};
 use terraswap::pair::Cw20HookMsg::Swap;
@@ -24,14 +24,14 @@ pub fn query_pair_addr(deps: Deps, terraswap_factory_addr: &Addr, masset_token: 
     Ok(pair_info.contract_addr)
 }
 
-pub fn sell_asset(env: Env, depositing_state: &DepositingState, pair_addr: &Addr) -> StdResult<Response> {
+pub fn sell_asset(env: Env, depositing_state: &DepositingState, minted_amount: Uint128) -> StdResult<Response> {
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: depositing_state.masset_token.to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Send {
-                    contract: pair_addr.to_string(),
-                    amount: depositing_state.masset_amount_to_sell,
+                    contract: depositing_state.mirror_ts_factory_addr.to_string(),
+                    amount: minted_amount,
                     msg: to_binary(&Swap {
                         belief_price: None,
                         max_spread: None,
@@ -40,7 +40,7 @@ pub fn sell_asset(env: Env, depositing_state: &DepositingState, pair_addr: &Addr
                 })?,
                 funds: vec![],
             }),
-            SubmsgIds::DepositToCDP.id(),
+            SubmsgIds::DepositStableOnReply.id(),
         ))
         .add_attributes(vec![
             ("action", "sell_asset"),

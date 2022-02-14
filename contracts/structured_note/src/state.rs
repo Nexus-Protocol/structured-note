@@ -41,6 +41,7 @@ pub struct DepositingState {
     pub initial_cdp_collateral_amount: Uint128,
     pub initial_cdp_loan_amount: Uint128,
     pub asset_price_in_collateral_asset: Decimal,
+    pub mirror_ts_factory_addr: Addr,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -126,6 +127,7 @@ impl DepositingState {
             initial_cdp_collateral_amount: Uint128::zero(),
             initial_cdp_loan_amount: Uint128::zero(),
             asset_price_in_collateral_asset: Decimal::zero(),
+            mirror_ts_factory_addr: Default::default(),
         }
     }
 }

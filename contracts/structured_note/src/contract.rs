@@ -10,13 +10,12 @@ use protobuf::Message;
 
 use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
-use crate::anchor::get_minted_amount_from_deposit_response;
-use crate::commands::{deposit_stable, validate_masset};
-use crate::mirror::{deposit_to_cdp, get_deposited_amount_from_deposit_to_cdp_response, mint_to_cdp, open_cdp, query_asset_price, query_collateral_price, query_masset_config, query_mirror_mint_config};
+use crate::commands::{deposit_stable, deposit_stable_on_reply, validate_masset};
+use crate::mirror::{deposit_to_cdp, mint_to_cdp, open_cdp, query_asset_price, query_collateral_price, query_masset_config, query_mirror_mint_config};
 use crate::state::{Config, DepositingState, load_config, load_depositing_state};
 use crate::SubmsgIds;
-use crate::terraswap::sell_asset;
-use crate::utils::{decimal_division, reverse_decimal};
+use crate::terraswap::{query_pair_addr, sell_asset};
+use crate::utils::{decimal_division, decimal_multiplication, get_amount_from_response_asset_as_string_attr, get_amount_from_response_raw_attr, reverse_decimal};
 
 #[entry_point]
 pub fn instantiate(
@@ -57,7 +56,40 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             let masset_config = query_masset_config(deps.as_ref(), &masset_token)?;
             validate_masset(masset_config)?;
             let depositing_state = DepositingState::template(info.sender.clone(), masset_token, aim_collateral_ratio, leverage_iter_amount);
-            deposit_stable(deps, info, &masset_config, depositing_state)
+
+            let deposit_amount: Uint256 = info
+                .funds
+                .iter()
+                .find(|c| c.denom == config.stable_denom)
+                .map(|c| Uint256::from(c.amount))
+                .unwrap_or_else(Uint256::zero);
+
+            // Cannot deposit zero amount
+            if deposit_amount.is_zero() {
+                return Err(StdError::generic_err("Deposit amount is zero".to_string()));
+            };
+
+            let config = load_config(&deps.storage)?;
+
+            if depositing_state.aim_collateral_ratio > 0.0 {
+                let min_collateral_ratio = decimal_multiplication(&masset_config.min_collateral_ratio, &config.min_over_collateralization);
+                if depositing_state.aim_collateral_ratio < min_collateral_ratio {
+                    return Err(StdError::generic_err("Aim collateral ration too low".to_string()));
+                } else {
+                    let mirror_mint_config = query_mirror_mint_config(config.mirror_mint_contract.to_string())?;
+
+                    let collateral_oracle = deps.api.addr_validate(mirror_mint_config.collateral_oracle.as_str())?;
+                    let collateral_price = query_collateral_price(deps.as_ref(), &collateral_oracle, &config.aterra_addr)?;
+
+                    let oracle_addr = deps.api.addr_validate(mirror_mint_config.oracle.as_str())?;
+                    let asset_price = query_asset_price(deps.as_ref(), &oracle_addr, &depositing_state.masset_token, config.stable_denom)?;
+
+                    deposit_state.asset_price_in_collateral_asset = decimal_division(collateral_price, asset_price);
+                    deposit_state.mirror_ts_factory_addr = deps.api.addr_validate(mirror_mint_config.terraswap_factory.as_str())?;
+                }
+            };
+
+            deposit_stable(deps, depositing_state, deposit_amount)
         }
     }
 }
@@ -68,17 +100,17 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
     match submessage_enum {
         SubmsgIds::OpenCDP => {
             let events = msg.result.unwrap().events;
-            let received_aust_amount = get_minted_amount_from_deposit_response(events)?;
+            let received_aust_amount = get_attr_value_from_response(events, "mint_amount".to_string())?;
             open_cdp(deps, received_aust_amount.into())
         },
         SubmsgIds::DepositToCDP => {
             let events = msg.result.unwrap().events;
-            let received_aust_amount = get_minted_amount_from_deposit_response(events)?;
+            let received_aust_amount = get_amount_from_response_raw_attr(events, "mint_amount".to_string())?;
             deposit_to_cdp(deps, received_aust_amount.into())
         },
         SubmsgIds::MintAssetWithAimCollateralRatio => {
             let events = msg.result.unwrap().events;
-            let deposited_amount = get_deposited_amount_from_deposit_to_cdp_response(events)?;
+            let deposited_amount = get_amount_from_response_asset_as_string_attr(events, "deposit_amount".to_string())?;
 
             let depositing_state = load_depositing_state(deps.storage)?;
 
@@ -87,7 +119,16 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
             mint_to_cdp(&depositing_state, mint_amount)
         }
         SubmsgIds::SellAsset => {
-            sell_asset()
+            let events = msg.result.unwrap().events;
+            let minted_amount = get_amount_from_response_asset_as_string_attr(events, "mint_amount".to_string())?;
+            let depositing_state = load_depositing_state(deps.storage)?;
+
+            sell_asset(env, &depositing_state, minted_amount.into())
+        },
+        SubmsgIds::DepositStableOnReply => {
+            let events = msg.result.unwrap().events;
+            let received_stable = get_amount_from_response_raw_attr(events, "return_amount".to_string())?;
+            deposit_stable_on_reply(deps, depositing_state, received_stable.into())
         },
         SubmsgIds::Exit => {
             store_position_and_exit()

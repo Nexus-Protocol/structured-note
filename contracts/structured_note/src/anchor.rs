@@ -42,15 +42,3 @@ pub fn deposit_stable(deps: DepsMut, depositing_state: &mut DepositingState, dep
                 ("amount", &amount.to_string()),
             ])))
 }
-
-pub fn get_minted_amount_from_deposit_response(events: Vec<Event>) -> StdResult<String> {
-    events
-        .into_iter()
-        .map(|event| event.attributes)
-        .flatten()
-        .find(|attr| attr.key == "mint_amount")
-        .map(|attr| attr.value)
-        .ok_or_else(|| {
-            StdError::generic_err("Fail to parse Anchor Money Market deposit stable response")
-        })
-}
