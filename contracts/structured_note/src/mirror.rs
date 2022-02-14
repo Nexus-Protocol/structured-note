@@ -44,7 +44,7 @@ pub fn query_masset_config(deps: Deps, masset_token: &Addr) -> StdResult<MirrorA
     }
 }
 
-pub fn query_cdp(deps: Deps, cdp_idx: &Uint128) -> StdResult<CDPState> {
+pub fn query_cdp(deps: Deps, cdp_idx: Uint128) -> StdResult<CDPState> {
     let config = load_config(deps.storage)?;
 
     let cdp: StdResult<MirrorCDPResponse> =
@@ -112,9 +112,9 @@ pub fn open_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResult<Res
         ))
         .add_attributes(vec![
             ("action", "open_cdp"),
-            ("collateral_amount", received_aterra_amount.to_string()),
-            ("masset_token", depositing_state.masset_token.to_string()),
-            ("aim_collateral_ratio", depositing_state.aim_collateral_ratio.to_string()),
+            ("collateral_amount", &received_aterra_amount.to_string()),
+            ("masset_token", &depositing_state.masset_token.to_string()),
+            ("aim_collateral_ratio", &depositing_state.aim_collateral_ratio.to_string()),
         ]))
 }
 
@@ -139,8 +139,8 @@ pub fn deposit_to_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResu
         ))
         .add_attributes(vec![
             ("action", "deposit_to_cdp"),
-            ("collateral_amount", received_aterra_amount.to_string()),
-            ("masset_token", depositing_state.masset_token.to_string()),
+            ("collateral_amount", &received_aterra_amount.to_string()),
+            ("masset_token", &depositing_state.masset_token.to_string()),
         ]))
 }
 
@@ -157,12 +157,11 @@ pub fn mint_to_cdp(depositing_state: &DepositingState, amount_to_mint: Uint128) 
                 short_params: None,
             })?,
             funds: vec![],
-        }),
-                                                 SubmsgIds::SellAsset.id(),
+        }), SubmsgIds::SellAsset.id(),
         ))
         .add_attributes(vec![
             ("action", "mint_asset"),
-            ("masset_token", depositing_state.masset_token.to_string()),
-            ("mint_amount", amount_to_mint.to_string()),
+            ("masset_token", &depositing_state.masset_token.to_string()),
+            ("mint_amount", &amount_to_mint.to_string()),
         ]))
 }

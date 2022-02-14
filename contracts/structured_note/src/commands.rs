@@ -19,7 +19,7 @@ pub fn deposit_stable(
     let position_res = load_position(deps.storage, &depositing_state.farmer_addr, &depositing_state.masset_token);
     match position_res {
         Ok(position) => {
-            let cdp_state = query_cdp(deps.as_ref(), &position.cdp_idx)?;
+            let cdp_state = query_cdp(deps.as_ref(), position.cdp_idx)?;
             depositing_state.cdp_idx = position.cdp_idx;
             depositing_state.initial_cdp_collateral_amount = cdp_state.collateral_amount;
             depositing_state.initial_cdp_loan_amount = cdp_state.loan_amount;
@@ -28,7 +28,7 @@ pub fn deposit_stable(
             let cdp_res = load_cdp(deps.storage, masset_token);
             match cdp_res {
                 Ok(cdp) => {
-                    let cdp_state = query_cdp(deps.as_ref(), &cdp.idx)?;
+                    let cdp_state = query_cdp(deps.as_ref(), cdp.idx)?;
                     depositing_state.cdp_idx = position.cdp_idx;
                     depositing_state.initial_cdp_collateral_amount = cdp_state.collateral_amount;
                     depositing_state.initial_cdp_loan_amount = cdp_state.loan_amount;
@@ -58,9 +58,9 @@ pub fn validate_masset(masset_config: MirrorAssetConfigResponse) -> StdResult<Re
     Ok(Default::default())
 }
 
-pub fn store_position_and_exit(mut deps: DepsMut, aterra_in_contract: Uint128) -> StdResult<()> {
+pub fn store_position_and_exit(mut deps: DepsMut, aterra_in_contract: Uint128) -> StdResult<Response> {
     let depositing_state = load_depositing_state(deps.storage)?;
-    let current_cdp_state = query_cdp(deps.as_ref(), &depositing_state.cdp_idx)?;
+    let current_cdp_state = query_cdp(deps.as_ref(), depositing_state.cdp_idx)?;
     let loan_diff = current_cdp_state.loan_amount - depositing_state.initial_cdp_loan_amount;
     let collateral_diff = current_cdp_state.collateral_amount - depositing_state.initial_cdp_collateral_amount;
     let position_res = load_position(deps.storage, &depositing_state.farmer_addr, &depositing_state.masset_token);
@@ -75,37 +75,35 @@ pub fn store_position_and_exit(mut deps: DepsMut, aterra_in_contract: Uint128) -
                 total_collateral_amount: collateral_diff,
                 aterra_in_contract,
             };
-            save_position(&mut deps, &new_position)?;
-            let new_cdp = CDP {
-                idx: depositing_state.cdp_idx,
-                masset_token: depositing_state.masset_token.clone(),
-                farmers: vec![depositing_state.farmer_addr],
-            };
+            save_position(deps.storage, &new_position)?;
 
             let cdp_res = load_cdp(deps.storage, &depositing_state.masset_token);
             match cdp_res {
-                Ok(_) => add_farmer_to_cdp(deps.storage, &depositing_state.masset_token, &depositing_state.farmer_addr)?,
+                Ok(_) => {
+                    add_farmer_to_cdp(deps.storage, &depositing_state.masset_token, &depositing_state.farmer_addr)?;
+                },
                 Err(_) => {
                     let new_cdp = CDP {
                         idx: depositing_state.cdp_idx,
                         masset_token: depositing_state.masset_token.clone(),
                         farmers: vec![depositing_state.farmer_addr],
                     };
-                    save_cdp(deps.storage, &new_cdp)?
+                    save_cdp(deps.storage, &new_cdp)?;
                 },
-            }
-            Ok(())
+            };
+            Ok(Default::default())
         },
         Ok(position) => {
             update_position_on_deposit(deps.storage, &depositing_state.masset_token, loan_diff, collateral_diff, aterra_in_contract)?;
 
             //if position already exists absence of CDP is impossible
             let cdp = add_farmer_to_cdp(deps.storage, &depositing_state.masset_token, &depositing_state.farmer_addr)?;
+            Ok(Default::default())
         }
     }
 }
 
-pub fn calculate_asset_price_in_collateral_asset(config: Config) -> Decimal {
+pub fn calculate_asset_price_in_collateral_asset(config: Config) -> StdResult<Decimal> {
     let mirror_mint_config = query_mirror_mint_config(config.mirror_mint_contract.to_string())?;
 
     let collateral_oracle = deps.api.addr_validate(mirror_mint_config.collateral_oracle.as_str())?;
@@ -114,5 +112,5 @@ pub fn calculate_asset_price_in_collateral_asset(config: Config) -> Decimal {
     let oracle_addr = deps.api.addr_validate(mirror_mint_config.oracle.as_str())?;
     let asset_price = query_asset_price(deps.as_ref(), &oracle_addr, &depositing_state.masset_token, config.stable_denom)?;
 
-    decimal_division(collateral_price, asset_price)
+    Ok(decimal_division(collateral_price, asset_price))
 }

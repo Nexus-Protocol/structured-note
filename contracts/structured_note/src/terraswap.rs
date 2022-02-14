@@ -44,7 +44,7 @@ pub fn sell_asset(env: Env, depositing_state: &DepositingState, minted_amount: U
         ))
         .add_attributes(vec![
             ("action", "sell_asset"),
-            ("masset_token", depositing_state.masset_token.to_string()),
-            ("amount_to_sell", depositing_state.masset_amount_to_sell.to_string()),
+            ("masset_token", &depositing_state.masset_token.to_string()),
+            ("amount_to_sell", &minted_amount.to_string()),
         ]))
 }

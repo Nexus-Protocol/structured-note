@@ -4,7 +4,7 @@ use cosmwasm_std::{attr, Decimal, Event, StdError, StdResult, Uint128};
 const DECIMAL_FRACTIONAL: Uint128 = Uint128::new(1_000_000_000u128);
 
 pub fn decimal_multiplication(arg_1: &Decimal, arg_2: &Decimal) -> Decimal {
-    Decimal::from_ratio(DECIMAL_FRACTIONAL * arg_1 * arg_2, DECIMAL_FRACTIONAL)
+    Decimal::from_ratio(DECIMAL_FRACTIONAL * arg_1.clone() * arg_2.clone(), DECIMAL_FRACTIONAL)
 }
 
 pub fn decimal_division(num: Decimal, denom: Decimal) -> Decimal {

@@ -38,3 +38,16 @@ impl TryFrom<u64> for SubmsgIds {
         }
     }
 }
+
+impl SubmsgIds {
+    pub const fn id(&self) -> u64 {
+        match self {
+            SubmsgIds::OpenCDP => 0,
+            SubmsgIds::DepositToCDP => 1,
+            SubmsgIds::MintAssetWithAimCollateralRatio => 2,
+            SubmsgIds::SellAsset => 3,
+            SubmsgIds::DepositStableOnReply => 4,
+            SubmsgIds::Exit => 5,
+        }
+    }
+}

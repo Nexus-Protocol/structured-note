@@ -1,5 +1,5 @@
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{Coin, CosmosMsg, DepsMut, Event, Response, StdError, StdResult, SubMsg, to_binary, WasmMsg};
+use cosmwasm_std::{Coin, CosmosMsg, DepsMut, Event, Response, StdError, StdResult, SubMsg, to_binary, Uint128, WasmMsg};
 
 use structured_note_package::anchor::AnchorMarketMsg;
 
@@ -23,7 +23,7 @@ pub fn deposit_stable(deps: DepsMut, depositing_state: &mut DepositingState, dep
         submsg_id = SubmsgIds::Exit.id();
     }
 
-    if depositing_state.cdp_idx == Uint256::zero() {
+    if depositing_state.cdp_idx == Uint128::zero() {
         submsg_id = SubmsgIds::OpenCDP.id();
     } else {
         submsg_id = SubmsgIds::DepositToCDP.id();
