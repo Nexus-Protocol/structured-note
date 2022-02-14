@@ -10,7 +10,7 @@ use protobuf::Message;
 
 use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
-use crate::commands::{deposit_stable, deposit_stable_on_reply, validate_masset};
+use crate::commands::{deposit_stable, deposit_stable_on_reply, store_position_and_exit, validate_masset};
 use crate::mirror::{deposit_to_cdp, mint_to_cdp, open_cdp, query_asset_price, query_collateral_price, query_masset_config, query_mirror_mint_config};
 use crate::state::{Config, DepositingState, load_config, load_depositing_state};
 use crate::SubmsgIds;
@@ -100,13 +100,13 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
     match submessage_enum {
         SubmsgIds::OpenCDP => {
             let events = msg.result.unwrap().events;
-            let received_aust_amount = get_attr_value_from_response(events, "mint_amount".to_string())?;
-            open_cdp(deps, received_aust_amount.into())
+            let received_aterra_amount = get_attr_value_from_response(events, "mint_amount".to_string())?;
+            open_cdp(deps, received_aterra_amount.into())
         },
         SubmsgIds::DepositToCDP => {
             let events = msg.result.unwrap().events;
-            let received_aust_amount = get_amount_from_response_raw_attr(events, "mint_amount".to_string())?;
-            deposit_to_cdp(deps, received_aust_amount.into())
+            let received_farmer_amount = get_amount_from_response_raw_attr(events, "mint_amount".to_string())?;
+            deposit_to_cdp(deps, received_farmer_amount.into())
         },
         SubmsgIds::MintAssetWithAimCollateralRatio => {
             let events = msg.result.unwrap().events;
@@ -131,7 +131,9 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
             deposit_stable_on_reply(deps, depositing_state, received_stable.into())
         },
         SubmsgIds::Exit => {
-            store_position_and_exit()
+            let events = msg.result.unwrap().events;
+            let received_aterra_amount = get_attr_value_from_response(events, "mint_amount".to_string())?;
+            store_position_and_exit(deps, received_aterra_amount)
         }
     }
 }

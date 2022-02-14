@@ -44,7 +44,7 @@ pub fn query_masset_config(deps: Deps, masset_token: &Addr) -> StdResult<MirrorA
     }
 }
 
-pub fn query_cdp(deps: Deps, cdp_idx: Uint128) -> StdResult<CDPState> {
+pub fn query_cdp(deps: Deps, cdp_idx: &Uint128) -> StdResult<CDPState> {
     let config = load_config(deps.storage)?;
 
     let cdp: StdResult<MirrorCDPResponse> =
@@ -87,7 +87,7 @@ pub fn query_asset_price(deps: Deps, oracle_addr: &Addr, asset_addr: &Addr, base
     Ok(res.rate)
 }
 
-pub fn open_cdp(deps: DepsMut, received_aust_amount: Uint128) -> StdResult<Response> {
+pub fn open_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResult<Response> {
     let config = load_config(deps.storage)?;
     let depositing_state = load_depositing_state(deps.storage)?;
 
@@ -97,7 +97,7 @@ pub fn open_cdp(deps: DepsMut, received_aust_amount: Uint128) -> StdResult<Respo
                 contract_addr: config.aterra_addr.to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Send {
                     contract: config.mirror_mint_contract.to_string(),
-                    amount: received_aust_amount,
+                    amount: received_aterra_amount,
                     msg: to_binary(&MirrorMintCW20HookMsg::OpenPosition {
                         asset_info: AssetInfo::Token {
                             contract_addr: depositing_state.masset_token.to_string()
@@ -112,13 +112,13 @@ pub fn open_cdp(deps: DepsMut, received_aust_amount: Uint128) -> StdResult<Respo
         ))
         .add_attributes(vec![
             ("action", "open_cdp"),
-            ("collateral_amount", received_aust_amount.to_string()),
-            ("masset_addr", depositing_state.masset_token.to_string()),
+            ("collateral_amount", received_aterra_amount.to_string()),
+            ("masset_token", depositing_state.masset_token.to_string()),
             ("aim_collateral_ratio", depositing_state.aim_collateral_ratio.to_string()),
         ]))
 }
 
-pub fn deposit_to_cdp(deps: DepsMut, received_aust_amount: Uint128) -> StdResult<Response> {
+pub fn deposit_to_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResult<Response> {
     let config = load_config(deps.storage)?;
     let depositing_state = load_depositing_state(deps.storage)?;
 
@@ -128,7 +128,7 @@ pub fn deposit_to_cdp(deps: DepsMut, received_aust_amount: Uint128) -> StdResult
                 contract_addr: config.aterra_addr.to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Send {
                     contract: config.mirror_mint_contract.to_string(),
-                    amount: received_aust_amount,
+                    amount: received_aterra_amount,
                     msg: to_binary(&MirrorMintCW20HookMsg::Deposit {
                         position_idx: depositing_state.cdp_idx
                     })?,
@@ -139,8 +139,8 @@ pub fn deposit_to_cdp(deps: DepsMut, received_aust_amount: Uint128) -> StdResult
         ))
         .add_attributes(vec![
             ("action", "deposit_to_cdp"),
-            ("collateral_amount", received_aust_amount.to_string()),
-            ("masset_addr", depositing_state.masset_token.to_string()),
+            ("collateral_amount", received_aterra_amount.to_string()),
+            ("masset_token", depositing_state.masset_token.to_string()),
         ]))
 }
 
@@ -162,7 +162,7 @@ pub fn mint_to_cdp(depositing_state: &DepositingState, amount_to_mint: Uint128) 
         ))
         .add_attributes(vec![
             ("action", "mint_asset"),
-            ("masset_addr", depositing_state.masset_token.to_string()),
+            ("masset_token", depositing_state.masset_token.to_string()),
             ("mint_amount", amount_to_mint.to_string()),
         ]))
 }
