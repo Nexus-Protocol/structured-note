@@ -67,7 +67,7 @@ pub fn query_cdp(deps: Deps, cdp_idx: Uint128) -> StdResult<CDPState> {
     }
 }
 
-pub fn query_collateral_price(deps: Deps, collateral_oracle_addr: &Addr, aterra_addr: &Addr) -> StdResult<(Decimal, Decimal)> {
+pub fn query_collateral_price(deps: Deps, collateral_oracle_addr: &Addr, aterra_addr: &Addr) -> StdResult<Decimal> {
     let res: MirrorCollateralPriceResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
         contract_addr: collateral_oracle_addr.to_string(),
         msg: to_binary(&CollateralOracleQueryMsg::CollateralPrice {
@@ -75,7 +75,7 @@ pub fn query_collateral_price(deps: Deps, collateral_oracle_addr: &Addr, aterra_
             None,
         })?,
     }))?;
-    Ok((res.rate, res.multiplier))
+    Ok(res.rate)
 }
 
 pub fn query_asset_price(deps: Deps, oracle_addr: &Addr, asset_addr: &Addr, base_asset: String) -> StdResult<Decimal> {
@@ -143,6 +143,29 @@ pub fn deposit_to_cdp(deps: DepsMut, received_aust_amount: Uint128) -> StdResult
             ("action", "deposit_to_cdp"),
             ("collateral_amount", received_aust_amount.to_string()),
             ("masset_addr", depositing_state.masset_token.to_string()),
+        ]))
+}
+
+pub fn mint_to_cdp(depositing_state: &DepositingState, amount_to_mint: Uint128) -> StdResult<Response> {
+    Ok(Response::new()
+        .add_submessage(SubMsg::reply_on_success(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: config.mirror_mint_contract.to_string(),
+            msg: to_binary(&MirrorMintExecuteMsg::Mint {
+                position_idx: depositing_state.cdp_idx,
+                asset: Asset {
+                    info: AssetInfo::Token { contract_addr: depositing_state.masset_token.to_string() },
+                    amount: amount_to_mint,
+                },
+                short_params: None,
+            })?,
+            funds: vec![],
+        }),
+                                                 SubmsgIds::SellAsset.id(),
+        ))
+        .add_attributes(vec![
+            ("action", "mint_asset"),
+            ("masset_addr", depositing_state.masset_token.to_string()),
+            ("mint_amount", amount_to_mint.to_string()),
         ]))
 }
 

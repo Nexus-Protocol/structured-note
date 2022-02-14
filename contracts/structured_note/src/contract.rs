@@ -12,7 +12,7 @@ use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, Query
 
 use crate::anchor::get_minted_amount_from_deposit_response;
 use crate::commands::{deposit_stable, validate_masset};
-use crate::mirror::{deposit_to_cdp, get_deposited_amount_from_deposit_to_cdp_response, mint_asset_to_aim_collateral_ratio, open_cdp, query_asset_price, query_collateral_price, query_collateral_price_and_multiplier, query_masset_config, query_mirror_mint_config};
+use crate::mirror::{deposit_to_cdp, get_deposited_amount_from_deposit_to_cdp_response, mint_to_cdp, open_cdp, query_asset_price, query_collateral_price, query_masset_config, query_mirror_mint_config};
 use crate::state::{Config, DepositingState, load_config, load_depositing_state};
 use crate::SubmsgIds;
 use crate::terraswap::sell_asset;
@@ -80,22 +80,11 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
             let events = msg.result.unwrap().events;
             let deposited_amount = get_deposited_amount_from_deposit_to_cdp_response(events)?;
 
-            let config = load_config(deps.storage)?;
             let depositing_state = load_depositing_state(deps.storage)?;
-            let mirror_mint_config = query_mirror_mint_config(deps.as_ref())?;
 
-            let collateral_oracle = deps.api.addr_validate(mirror_mint_config.collateral_oracle.as_str())?;
-            let (collateral_price, collateral_multiplier) = query_collateral_price(deps.as_ref(), &collateral_oracle, &config.aterra_addr);
+            let mint_amount = Uint128::from_str(deposited_amount.as_str()) * depositing_state.asset_price_in_collateral_asset * reverse_decimal(depositing_state.aim_collateral_ratio);
 
-            let oracle_addr = deps.api.addr_validate(mirror_mint_config.oracle.as_str())?;
-            let asset_price = query_asset_price(deps.as_ref(), &oracle_addr, &depositing_state.masset_token, config.stable_denom)?;
-
-            let asset_price_in_collateral_asset = decimal_division(collateral_price, asset_price);
-
-            let mint_amount = Uint128::from_str(deposited_amount.as_str()) * asset_price_in_collateral_asset * reverse_decimal(depositing_state.aim_collateral_ratio);
-
-            //TODO:
-            mint_asset_to_aim_collateral_ratio()
+            mint_to_cdp(&depositing_state, mint_amount)
         }
         SubmsgIds::SellAsset => {
             sell_asset()

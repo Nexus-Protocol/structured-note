@@ -40,6 +40,7 @@ pub struct DepositingState {
     pub cur_iteration_index: u8,
     pub initial_cdp_collateral_amount: Uint128,
     pub initial_cdp_loan_amount: Uint128,
+    pub asset_price_in_collateral_asset: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -122,8 +123,9 @@ impl DepositingState {
             aim_collateral_ratio: aim_collateral_ratio.unwrap_or_else(Decimal::zero()),
             max_iteration_index: leverage_iter_amount.unwrap_or_else(0),
             cur_iteration_index: 0,
-            initial_cdp_collateral_amount: Default::default(),
-            initial_cdp_loan_amount: Default::default(),
+            initial_cdp_collateral_amount: Uint128::zero(),
+            initial_cdp_loan_amount: Uint128::zero(),
+            asset_price_in_collateral_asset: Decimal::zero(),
         }
     }
 }
