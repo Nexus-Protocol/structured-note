@@ -86,7 +86,7 @@ pub fn save_cdp(storage: &mut dyn Storage, cdp: &CDP) -> StdResult<()> {
 }
 
 pub fn remove_cdp(storage: &mut dyn Storage, masset_token: &Addr) {
-    KEY_CDPS.remove(storage: &mut dyn Storage, masset_token)
+    KEY_CDPS.remove(storage, masset_token)
 }
 
 pub fn add_farmer_to_cdp(storage: &mut dyn Storage, masset_token: &Addr, farmer_addr: &Addr) -> StdResult<CDP> {
@@ -174,7 +174,7 @@ pub fn save_position(storage: &mut dyn Storage, position: &Position) -> StdResul
 }
 
 pub fn remove_position(storage: &mut dyn Storage, farmer_addr: &Addr, masset_token: &Addr) {
-    KEY_POSITIONS.remove(storage: &mut dyn Storage, (farmer_addr, masset_token))
+    KEY_POSITIONS.remove(storage, (farmer_addr, masset_token))
 }
 
 impl DepositingState {

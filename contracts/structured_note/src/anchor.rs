@@ -17,17 +17,14 @@ pub fn deposit_stable(deps: DepsMut, depositing_state: &mut DepositingState, dep
     // Every iteration starts with iteration index incrementation, cause every iteration starts/ends here
     depositing_state.cur_iteration_index += 1;
 
-    let mut submsg_id = Default::default();
-
-    if depositing_state.cur_iteration_index == depositing_state.max_iteration_index {
-        submsg_id = SubmsgIds::Exit.id();
-    }
-
-    if depositing_state.cdp_idx == Uint128::zero() {
-        submsg_id = SubmsgIds::OpenCDP.id();
-    } else {
-        submsg_id = SubmsgIds::DepositToCDP.id();
-    }
+    let submsg_id =
+        if depositing_state.cur_iteration_index == depositing_state.max_iteration_index {
+            SubmsgIds::Exit.id()
+        } else if depositing_state.cdp_idx == Uint128::zero() {
+            SubmsgIds::OpenCDP.id()
+        } else {
+            SubmsgIds::DepositToCDP.id()
+        };
 
     store_depositing_state(deps.storage, depositing_state)?;
 

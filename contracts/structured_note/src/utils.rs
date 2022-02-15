@@ -21,10 +21,10 @@ pub fn get_amount_from_response_raw_attr(events: Vec<Event>, raw_attr_name: Stri
         .into_iter()
         .map(|event| event.attributes)
         .flatten()
-        .find(|attr| attr.key == raw_attr_name)
+        .find(|attr| attr.key == raw_attr_name.clone())
         .map(|attr| attr.value)
         .ok_or_else(|| {
-            StdError::generic_err(format!("Attr '{}' not found", raw_attr_name))
+            StdError::generic_err(format!("Attr '{}' not found", &raw_attr_name))
         })
 }
 
@@ -33,13 +33,13 @@ pub fn get_amount_from_response_asset_as_string_attr(events: Vec<Event>, attr_na
         .into_iter()
         .map(|event| event.attributes)
         .flatten()
-        .find(|attr| attr.key == attr_name)
+        .find(|attr| attr.key == attr_name.clone())
         .map(|attr| attr.value)
         .ok_or_else(|| {
-            StdError::generic_err(format!("Attr '{}' not found", attr_name))
+            StdError::generic_err(format!("Attr '{}' not found", &attr_name))
         })?;
 
-    let result = get_amount_from_asset_as_string(attr_value);
+    let result = get_amount_from_asset_as_string(&attr_value);
     return match result {
         None => {
             Err(StdError::generic_err(format!("Fail to parse attr. Attr value: '{}'", attr_value)))
@@ -52,7 +52,7 @@ pub fn get_amount_from_response_asset_as_string_attr(events: Vec<Event>, attr_na
 
 // asset as string format is 0123terra1..... or 0123uusd(amount + token_addr or denom without spaces)
 // split mint_amount by the first met 't' or 'u'
-pub fn get_amount_from_asset_as_string(data: String) -> Option<String> {
+pub fn get_amount_from_asset_as_string(data: &String) -> Option<String> {
     for (i, c) in data.chars().enumerate() {
         if c == 't' || c == 'u' {
             return Some(data[..i].to_string());

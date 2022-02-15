@@ -55,7 +55,7 @@ pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> 
             // check masset
             let masset_token = deps.api.addr_validate(&masset_token)?;
             let masset_config = query_masset_config(deps.as_ref(), &masset_token)?;
-            validate_masset(masset_config)?;
+            validate_masset(&masset_config)?;
             let mut depositing_state = DepositingState::template(
                 info.sender.clone(),
                 masset_token,
@@ -116,8 +116,9 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
             let deposited_amount = get_amount_from_response_asset_as_string_attr(events, "deposit_amount".to_string())?;
 
             let depositing_state = load_depositing_state(deps.storage)?;
-
-            let mint_amount = Uint128::from_str(&deposited_amount) * depositing_state.asset_price_in_collateral_asset * reverse_decimal(depositing_state.aim_collateral_ratio);
+            let deposited_amount = Uint128::from_str(&deposited_amount)?;
+            //TODO: check calculation results!!!
+            let mint_amount = deposited_amount * depositing_state.asset_price_in_collateral_asset * reverse_decimal(depositing_state.aim_collateral_ratio);
 
             mint_to_cdp(deps.as_ref(), &depositing_state, mint_amount)
         }

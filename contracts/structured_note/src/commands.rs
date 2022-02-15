@@ -44,7 +44,7 @@ pub fn deposit_stable_on_reply(
     anc_deposit_stable(deps, &mut depositing_state, deposit_amount)
 }
 
-pub fn validate_masset(masset_config: MirrorAssetConfigResponse) -> StdResult<Response> {
+pub fn validate_masset(masset_config: &MirrorAssetConfigResponse) -> StdResult<Response> {
     if masset_config.end_price.is_some() {
         return Err(StdError::generic_err("Invalid mirror asset: delisted  or migrated".to_string()));
     };
@@ -54,7 +54,7 @@ pub fn validate_masset(masset_config: MirrorAssetConfigResponse) -> StdResult<Re
     Ok(Default::default())
 }
 
-pub fn store_position_and_exit(mut deps: DepsMut, aterra_in_contract: Uint128) -> StdResult<Response> {
+pub fn store_position_and_exit(deps: DepsMut, aterra_in_contract: Uint128) -> StdResult<Response> {
     let depositing_state = load_depositing_state(deps.storage)?;
     let current_cdp_state = query_cdp(deps.as_ref(), depositing_state.cdp_idx)?;
     let loan_diff = current_cdp_state.loan_amount - depositing_state.initial_cdp_loan_amount;
@@ -63,8 +63,8 @@ pub fn store_position_and_exit(mut deps: DepsMut, aterra_in_contract: Uint128) -
     match position_res {
         Err(_) => {
             let new_position = Position {
-                farmer_addr: depositing_state.farmer_addr,
-                masset_token: depositing_state.masset_token,
+                farmer_addr: depositing_state.farmer_addr.clone(),
+                masset_token: depositing_state.masset_token.clone(),
                 cdp_idx: depositing_state.cdp_idx,
                 leverage_iter_amount: depositing_state.max_iteration_index,
                 total_loan_amount: loan_diff,
