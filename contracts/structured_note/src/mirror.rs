@@ -1,4 +1,4 @@
-use cosmwasm_std::{Addr, CosmosMsg, Decimal, Deps, DepsMut, QueryRequest, Response, StdError, StdResult, SubMsg, to_binary, Uint128, WasmMsg, WasmQuery};
+use cosmwasm_std::{Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut, QueryRequest, Response, StdError, StdResult, SubMsg, to_binary, Uint128, WasmMsg, WasmQuery};
 use cosmwasm_storage::to_length_prefixed;
 use cw20::Cw20ExecuteMsg;
 use terraswap::asset::{Asset, AssetInfo};
@@ -8,7 +8,7 @@ use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, Mirro
 use crate::state::{DepositingState, load_config, load_depositing_state};
 use crate::SubmsgIds;
 
-pub fn query_mirror_mint_config(mirror_mint_contract: String) -> StdResult<MirrorMintConfigResponse> {
+pub fn query_mirror_mint_config(deps: Deps, mirror_mint_contract: String) -> StdResult<MirrorMintConfigResponse> {
     let mirror_mint_config: MirrorMintConfigResponse =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Raw {
             contract_addr: mirror_mint_contract,
@@ -23,9 +23,9 @@ pub fn query_masset_config(deps: Deps, masset_token: &Addr) -> StdResult<MirrorA
     let masset_config: StdResult<MirrorAssetConfigResponse> =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Raw {
             contract_addr: config.mirror_mint_contract.to_string(),
-            key: Binary::from(concat(
-                &to_length_prefixed(b"asset_config"),
-                masset_token.as_bytes(),
+            key: Binary::from(concat!(
+            &to_length_prefixed(b"asset_config"),
+            masset_token.as_bytes(),
             )),
         }));
 
@@ -47,9 +47,9 @@ pub fn query_cdp(deps: Deps, cdp_idx: Uint128) -> StdResult<CDPState> {
     let cdp: StdResult<MirrorCDPResponse> =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Raw {
             contract_addr: config.mirror_mint_contract.to_string(),
-            key: Binary::from(concat(
-                &to_length_prefixed(b"position"),
-                cdp_idx.as_bytes(),
+            key: Binary::from(concat!(
+            &to_length_prefixed(b"position"),
+            cdp_idx.as_bytes(),
             )),
         }));
 
@@ -86,7 +86,7 @@ pub fn query_asset_price(deps: Deps, oracle_addr: &Addr, asset_addr: &Addr, base
 
 pub fn open_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResult<Response> {
     let config = load_config(deps.storage)?;
-    let e = load_depositing_state(deps.storage)?;
+    let depositing_state = load_depositing_state(deps.storage)?;
 
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
@@ -141,7 +141,9 @@ pub fn deposit_to_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResu
         ]))
 }
 
-pub fn mint_to_cdp(depositing_state: &DepositingState, amount_to_mint: Uint128) -> StdResult<Response> {
+pub fn mint_to_cdp(deps: Deps, depositing_state: &DepositingState, amount_to_mint: Uint128) -> StdResult<Response> {
+    let config = load_config(deps.storage)?;
+
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.mirror_mint_contract.to_string(),

@@ -1,5 +1,5 @@
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{Decimal, DepsMut, Response, StdError, StdResult, Uint128};
+use cosmwasm_std::{Decimal, Deps, DepsMut, Response, StdError, StdResult, Uint128};
 
 use structured_note_package::mirror::MirrorAssetConfigResponse;
 
@@ -22,11 +22,11 @@ pub fn deposit_stable(
             depositing_state.initial_cdp_loan_amount = cdp_state.loan_amount;
         }
         Err(_) => {
-            let cdp_res = load_cdp(deps.storage, masset_token);
+            let cdp_res = load_cdp(deps.storage, &depositing_state.masset_token);
             match cdp_res {
                 Ok(cdp) => {
                     let cdp_state = query_cdp(deps.as_ref(), cdp.idx)?;
-                    depositing_state.cdp_idx = position.cdp_idx;
+                    depositing_state.cdp_idx = cdp.idx;
                     depositing_state.initial_cdp_collateral_amount = cdp_state.collateral_amount;
                     depositing_state.initial_cdp_loan_amount = cdp_state.loan_amount;
                 }
@@ -98,16 +98,4 @@ pub fn store_position_and_exit(mut deps: DepsMut, aterra_in_contract: Uint128) -
             Ok(Default::default())
         }
     }
-}
-
-pub fn calculate_asset_price_in_collateral_asset(config: Config) -> StdResult<Decimal> {
-    let mirror_mint_config = query_mirror_mint_config(config.mirror_mint_contract.to_string())?;
-
-    let collateral_oracle = deps.api.addr_validate(mirror_mint_config.collateral_oracle.as_str())?;
-    let collateral_price = query_collateral_price(deps.as_ref(), &collateral_oracle, &config.aterra_addr)?;
-
-    let oracle_addr = deps.api.addr_validate(mirror_mint_config.oracle.as_str())?;
-    let asset_price = query_asset_price(deps.as_ref(), &oracle_addr, &depositing_state.masset_token, config.stable_denom)?;
-
-    Ok(decimal_division(collateral_price, asset_price))
 }

@@ -30,6 +30,7 @@ pub struct CDP {
     pub farmers: Vec<Addr>,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DepositingState {
     pub cdp_idx: Uint128,
     pub farmer_addr: Addr,
@@ -157,7 +158,3 @@ impl DepositingState {
         }
     }
 }
-
-
-
-
