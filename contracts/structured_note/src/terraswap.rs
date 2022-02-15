@@ -1,4 +1,4 @@
-use cosmwasm_std::{Addr, CosmosMsg, Deps, Env, Event, QueryRequest, Response, StdError, StdResult, SubMsg, to_binary, Uint128, Uint256, WasmMsg, WasmQuery};
+use cosmwasm_std::{Addr, CosmosMsg, Deps, Env, Response, StdResult, SubMsg, to_binary, Uint128, WasmMsg};
 use cw20::Cw20ExecuteMsg;
 use terraswap::asset::{AssetInfo, PairInfo};
 use terraswap::pair::Cw20HookMsg::Swap;

@@ -1,15 +1,12 @@
-use std::ops::{Div, Mul};
-
-use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, BlockInfo, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env, from_binary, MessageInfo, Response, StdError, StdResult, SubMsg, to_binary, Uint128, WasmMsg};
-use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
+use cosmwasm_bignumber::Uint256;
+use cosmwasm_std::{Decimal, DepsMut, Response, StdError, StdResult, Uint128};
 
 use structured_note_package::mirror::MirrorAssetConfigResponse;
 
 use crate::anchor::deposit_stable as anc_deposit_stable;
-use crate::mirror::{deposit_to_cdp, open_cdp, query_asset_price, query_cdp, query_collateral_price, query_mirror_mint_config};
-use crate::state::{add_farmer_to_cdp, CDP, Config, DepositingState, load_cdp, load_config, load_depositing_state, load_position, load_positions_by_farmer_addr, Position, save_cdp, save_position, update_position_on_deposit};
-use crate::utils::{decimal_division, decimal_multiplication};
+use crate::mirror::{query_asset_price, query_cdp, query_collateral_price, query_mirror_mint_config};
+use crate::state::{add_farmer_to_cdp, CDP, Config, DepositingState, load_cdp, load_depositing_state, load_position, Position, save_cdp, save_position, update_position_on_deposit};
+use crate::utils::decimal_division;
 
 pub fn deposit_stable(
     deps: DepsMut,
@@ -93,11 +90,11 @@ pub fn store_position_and_exit(mut deps: DepsMut, aterra_in_contract: Uint128) -
             };
             Ok(Default::default())
         },
-        Ok(position) => {
+        Ok(_) => {
             update_position_on_deposit(deps.storage, &depositing_state.masset_token, loan_diff, collateral_diff, aterra_in_contract)?;
 
             //if position already exists absence of CDP is impossible
-            let cdp = add_farmer_to_cdp(deps.storage, &depositing_state.masset_token, &depositing_state.farmer_addr)?;
+            add_farmer_to_cdp(deps.storage, &depositing_state.masset_token, &depositing_state.farmer_addr)?;
             Ok(Default::default())
         }
     }

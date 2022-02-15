@@ -1,4 +1,4 @@
-use cosmwasm_std::{attr, Decimal, Event, StdError, StdResult, Uint128};
+use cosmwasm_std::{Decimal, Event, StdError, StdResult, Uint128};
 
 // Math
 const DECIMAL_FRACTIONAL: Uint128 = Uint128::new(1_000_000_000u128);

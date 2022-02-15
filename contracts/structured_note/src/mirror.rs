@@ -1,14 +1,11 @@
-use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{Addr, CosmosMsg, Decimal, Deps, DepsMut, Event, QueryRequest, Response, StdError, StdResult, SubMsg, to_binary, Uint128, WasmMsg, WasmQuery};
+use cosmwasm_std::{Addr, CosmosMsg, Decimal, Deps, DepsMut, QueryRequest, Response, StdError, StdResult, SubMsg, to_binary, Uint128, WasmMsg, WasmQuery};
 use cosmwasm_storage::to_length_prefixed;
 use cw20::Cw20ExecuteMsg;
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 use terraswap::asset::{Asset, AssetInfo};
 
-use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorCollateralPriceResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg, MirrorOracleQueryMsg, MirrorPriceResponse};
+use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorCollateralOracleQueryMsg, MirrorCollateralPriceResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg, MirrorOracleQueryMsg, MirrorPriceResponse};
 
-use crate::state::{Config, DepositingState, load_config, load_depositing_state};
+use crate::state::{DepositingState, load_config, load_depositing_state};
 use crate::SubmsgIds;
 
 pub fn query_mirror_mint_config(mirror_mint_contract: String) -> StdResult<MirrorMintConfigResponse> {
@@ -68,9 +65,9 @@ pub fn query_cdp(deps: Deps, cdp_idx: Uint128) -> StdResult<CDPState> {
 pub fn query_collateral_price(deps: Deps, collateral_oracle_addr: &Addr, aterra_addr: &Addr) -> StdResult<Decimal> {
     let res: MirrorCollateralPriceResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
         contract_addr: collateral_oracle_addr.to_string(),
-        msg: to_binary(&CollateralOracleQueryMsg::CollateralPrice {
-            asset,
-            None,
+        msg: to_binary(&MirrorCollateralOracleQueryMsg::CollateralPrice {
+            asset: aterra_addr.to_string(),
+            block_height: None,
         })?,
     }))?;
     Ok(res.rate)
@@ -89,7 +86,7 @@ pub fn query_asset_price(deps: Deps, oracle_addr: &Addr, asset_addr: &Addr, base
 
 pub fn open_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResult<Response> {
     let config = load_config(deps.storage)?;
-    let depositing_state = load_depositing_state(deps.storage)?;
+    let e = load_depositing_state(deps.storage)?;
 
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(

@@ -1,5 +1,5 @@
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{Coin, CosmosMsg, DepsMut, Event, Response, StdError, StdResult, SubMsg, to_binary, Uint128, WasmMsg};
+use cosmwasm_std::{Coin, CosmosMsg, DepsMut, Response, StdResult, SubMsg, to_binary, Uint128, WasmMsg};
 
 use structured_note_package::anchor::AnchorMarketMsg;
 
@@ -39,6 +39,6 @@ pub fn deposit_stable(deps: DepsMut, depositing_state: &mut DepositingState, dep
         }), submsg_id)
             .add_attributes(vec![
                 ("action", "deposit_stable_to_anchor_market"),
-                ("amount", &amount.to_string()),
+                ("amount", &deposit_amount.to_string()),
             ])))
 }

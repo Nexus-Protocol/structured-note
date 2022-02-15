@@ -1,9 +1,8 @@
-use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, Decimal, Order, StdError, StdResult, Storage, Uint128, Uint64};
-use cw_storage_plus::{Bound, Item, Map};
+use cosmwasm_bignumber::Decimal256;
+use cosmwasm_std::{Addr, Decimal, Order, StdResult, Storage, Uint128};
+use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use terraswap::asset::Asset;
 
 static KEY_CONFIG: Item<Config> = Item::new("config");
 static KEY_DEPOSITING: Item<DepositingState> = Item::new("depositing");

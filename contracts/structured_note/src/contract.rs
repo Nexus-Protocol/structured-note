@@ -2,30 +2,29 @@ use std::convert::TryFrom;
 use std::str::FromStr;
 
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut, entry_point, Env, MessageInfo, Reply, Response, StdError, StdResult, SubMsg, to_binary, Uint128, WasmMsg};
-use protobuf::Message;
+use cosmwasm_std::{Binary, Decimal, Deps, DepsMut, entry_point, Env, MessageInfo, Reply, Response, StdError, StdResult, to_binary, Uint128};
 
 use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
 use crate::commands::{deposit_stable, deposit_stable_on_reply, store_position_and_exit, validate_masset};
 use crate::mirror::{deposit_to_cdp, mint_to_cdp, open_cdp, query_asset_price, query_collateral_price, query_masset_config, query_mirror_mint_config};
-use crate::state::{Config, DepositingState, load_config, load_depositing_state};
+use crate::state::{DepositingState, load_config, load_depositing_state};
 use crate::SubmsgIds;
-use crate::terraswap::{query_pair_addr, sell_asset};
+use crate::terraswap::sell_asset;
 use crate::utils::{decimal_division, decimal_multiplication, get_amount_from_response_asset_as_string_attr, get_amount_from_response_raw_attr, reverse_decimal};
 
 #[entry_point]
 pub fn instantiate(
-    deps: DepsMut,
+    _deps: DepsMut,
     _env: Env,
     _info: MessageInfo,
-    msg: InstantiateMsg,
+    _msg: InstantiateMsg,
 ) -> StdResult<Response> {
     unimplemented!()
 }
 
 #[entry_point]
-pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
+pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     match msg {
         ExecuteMsg::DepositStable {
             masset_token,
@@ -136,7 +135,7 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
 }
 
 #[entry_point]
-pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&load_config(deps.storage)?),
     }
