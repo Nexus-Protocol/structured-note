@@ -34,7 +34,7 @@ pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> 
             // check msq
             match leverage_iter_amount {
                 Some(value) => {
-                    if value < 1 || value > 5 {
+                    if !(1..=5).contains(&value) {
                         return Err(StdError::generic_err("Invalid message: leverage iterations amount should be from 1 to 5.".to_string()));
                     }
                     if aim_collateral_ratio.is_none() {

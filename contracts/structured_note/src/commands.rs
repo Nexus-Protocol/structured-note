@@ -22,14 +22,11 @@ pub fn deposit_stable(
         }
         Err(_) => {
             let cdp_res = load_cdp(deps.storage, &depositing_state.masset_token);
-            match cdp_res {
-                Ok(cdp) => {
-                    let cdp_state = query_cdp(deps.as_ref(), cdp.idx)?;
-                    depositing_state.cdp_idx = cdp.idx;
-                    depositing_state.initial_cdp_collateral_amount = cdp_state.collateral_amount;
-                    depositing_state.initial_cdp_loan_amount = cdp_state.loan_amount;
-                }
-                Err(_) => {}
+            if let Ok(cdp) = cdp_res {
+                let cdp_state = query_cdp(deps.as_ref(), cdp.idx)?;
+                depositing_state.cdp_idx = cdp.idx;
+                depositing_state.initial_cdp_collateral_amount = cdp_state.collateral_amount;
+                depositing_state.initial_cdp_loan_amount = cdp_state.loan_amount;
             }
         }
     };
@@ -77,7 +74,7 @@ pub fn store_position_and_exit(deps: DepsMut, aterra_in_contract: Uint128) -> St
             match cdp_res {
                 Ok(_) => {
                     add_farmer_to_cdp(deps.storage, &depositing_state.masset_token, &depositing_state.farmer_addr)?;
-                },
+                }
                 Err(_) => {
                     let new_cdp = CDP {
                         idx: depositing_state.cdp_idx,
@@ -85,10 +82,10 @@ pub fn store_position_and_exit(deps: DepsMut, aterra_in_contract: Uint128) -> St
                         farmers: vec![depositing_state.farmer_addr],
                     };
                     save_cdp(deps.storage, &new_cdp)?;
-                },
+                }
             };
             Ok(Default::default())
-        },
+        }
         Ok(_) => {
             update_position_on_deposit(deps.storage, &depositing_state.masset_token, &depositing_state.farmer_addr, loan_diff, collateral_diff, aterra_in_contract)?;
 

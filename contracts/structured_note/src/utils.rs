@@ -4,7 +4,7 @@ use cosmwasm_std::{Decimal, Event, StdError, StdResult, Uint128};
 const DECIMAL_FRACTIONAL: Uint128 = Uint128::new(1_000_000_000u128);
 
 pub fn decimal_multiplication(arg_1: &Decimal, arg_2: &Decimal) -> Decimal {
-    Decimal::from_ratio(DECIMAL_FRACTIONAL * arg_1.clone() * arg_2.clone(), DECIMAL_FRACTIONAL)
+    Decimal::from_ratio(DECIMAL_FRACTIONAL * (*arg_1) * (*arg_2), DECIMAL_FRACTIONAL)
 }
 
 pub fn decimal_division(num: Decimal, denom: Decimal) -> Decimal {
@@ -52,7 +52,7 @@ pub fn get_amount_from_response_asset_as_string_attr(events: Vec<Event>, attr_na
 
 // asset as string format is 0123terra1..... or 0123uusd(amount + token_addr or denom without spaces)
 // split mint_amount by the first met 't' or 'u'
-pub fn get_amount_from_asset_as_string(data: &String) -> Option<String> {
+pub fn get_amount_from_asset_as_string(data: &str) -> Option<String> {
     for (i, c) in data.chars().enumerate() {
         if c == 't' || c == 'u' {
             return Some(data[..i].to_string());
