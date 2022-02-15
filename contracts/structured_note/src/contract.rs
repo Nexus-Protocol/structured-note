@@ -47,13 +47,22 @@ pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> 
                     }
                 },
             };
+
+            let config = load_config(deps.storage)?;
+
+            let mirror_mint_config = query_mirror_mint_config(deps.as_ref(), config.mirror_mint_contract.to_string())?;
+
             // check masset
             let masset_token = deps.api.addr_validate(&masset_token)?;
             let masset_config = query_masset_config(deps.as_ref(), &masset_token)?;
             validate_masset(masset_config)?;
-            let mut depositing_state = DepositingState::template(info.sender.clone(), masset_token, aim_collateral_ratio, leverage_iter_amount);
-
-            let config = load_config(deps.storage)?;
+            let mut depositing_state = DepositingState::template(
+                info.sender.clone(),
+                masset_token,
+                aim_collateral_ratio,
+                leverage_iter_amount,
+                deps.api.addr_validate(&mirror_mint_config.terraswap_factory)?,
+            );
 
             let deposit_amount: Uint256 = info
                 .funds
@@ -72,8 +81,6 @@ pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> 
                 if depositing_state.aim_collateral_ratio < min_collateral_ratio {
                     return Err(StdError::generic_err("Aim collateral ration too low".to_string()));
                 } else {
-                    let mirror_mint_config = query_mirror_mint_config(deps.as_ref(), config.mirror_mint_contract.to_string())?;
-
                     let collateral_oracle = deps.api.addr_validate(&mirror_mint_config.collateral_oracle)?;
                     let collateral_price = query_collateral_price(deps.as_ref(), &collateral_oracle, &config.aterra_addr)?;
 

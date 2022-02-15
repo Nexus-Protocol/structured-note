@@ -70,6 +70,14 @@ pub fn load_cdp(storage: &dyn Storage, masset_token: &Addr) -> StdResult<CDP> {
 pub fn load_all_cdps(storage: &dyn Storage) -> StdResult<Vec<CDP>> {
     KEY_CDPS
         .range(storage, None, None, Order::Ascending)
+        .map(|cdp| {
+            let (_, v) = cdp?;
+            Ok(CDP {
+                idx: v.idx,
+                masset_token: v.masset_token,
+                farmers: v.farmers,
+            })
+        })
         .collect()
 }
 
@@ -85,7 +93,8 @@ pub fn add_farmer_to_cdp(storage: &mut dyn Storage, masset_token: &Addr, farmer_
     KEY_CDPS.update(
         storage,
         masset_token,
-        |mut cdp: CDP| -> StdResult<_> {
+        |cdp_opt| -> StdResult<_> {
+            let mut cdp = cdp_opt.unwrap();
             cdp.farmers.push(farmer_addr.clone());
             Ok(cdp)
         })
@@ -106,14 +115,16 @@ pub fn load_position(storage: &dyn Storage, farmer_addr: &Addr, masset_token: &A
 pub fn update_position_on_deposit(
     storage: &mut dyn Storage,
     masset_token: &Addr,
+    farmer_addr: &Addr,
     loan_diff: Uint128,
     collateral_diff: Uint128,
     aterra_amount_in_contract: Uint128,
 ) -> StdResult<Position> {
     KEY_POSITIONS.update(
         storage,
-        (&depositing_state.farmer_addr, masset_token),
-        |mut position: Position| -> StdResult<_> {
+        (farmer_addr, masset_token),
+        |position_opt| -> StdResult<_> {
+            let mut position = position_opt.unwrap();
             position.total_collateral_amount += collateral_diff;
             position.total_loan_amount += loan_diff;
             position.aterra_in_contract = aterra_amount_in_contract;
@@ -123,14 +134,38 @@ pub fn update_position_on_deposit(
 
 pub fn load_all_positions(storage: &dyn Storage) -> StdResult<Vec<Position>> {
     KEY_POSITIONS
-        .range(&storage, None, None, Order::Ascending)
+        .range(storage, None, None, Order::Ascending)
+        .map(|position| {
+            let (_, v) = position?;
+            Ok(Position {
+                farmer_addr: v.farmer_addr,
+                masset_token: v.masset_token,
+                cdp_idx: v.cdp_idx,
+                leverage_iter_amount: v.leverage_iter_amount,
+                total_loan_amount: v.total_loan_amount,
+                total_collateral_amount: v.total_collateral_amount,
+                aterra_in_contract: v.aterra_in_contract,
+            })
+        })
         .collect()
 }
 
 pub fn load_positions_by_farmer_addr(storage: &dyn Storage, farmer_addr: &Addr) -> StdResult<Vec<Position>> {
     KEY_POSITIONS
         .prefix(farmer_addr)
-        .range(&storage, None, None, Order::Ascending)
+        .range(storage, None, None, Order::Ascending)
+        .map(|position| {
+            let (_, v) = position?;
+            Ok(Position {
+                farmer_addr: v.farmer_addr,
+                masset_token: v.masset_token,
+                cdp_idx: v.cdp_idx,
+                leverage_iter_amount: v.leverage_iter_amount,
+                total_loan_amount: v.total_loan_amount,
+                total_collateral_amount: v.total_collateral_amount,
+                aterra_in_contract: v.aterra_in_contract,
+            })
+        })
         .collect()
 }
 
@@ -143,18 +178,18 @@ pub fn remove_position(storage: &mut dyn Storage, farmer_addr: &Addr, masset_tok
 }
 
 impl DepositingState {
-    pub fn template(farmer_addr: Addr, masset_token: Addr, aim_collateral_ratio: Option<Decimal>, leverage_iter_amount: Option<u8>) -> DepositingState {
+    pub fn template(farmer_addr: Addr, masset_token: Addr, aim_collateral_ratio: Option<Decimal>, leverage_iter_amount: Option<u8>, mirror_ts_factory_addr: Addr) -> DepositingState {
         DepositingState {
             cdp_idx: Default::default(),
             farmer_addr,
             masset_token,
-            aim_collateral_ratio: aim_collateral_ratio.unwrap_or_else(Decimal::zero()),
-            max_iteration_index: leverage_iter_amount.unwrap_or_else(0),
+            aim_collateral_ratio: aim_collateral_ratio.unwrap_or_default(),
+            max_iteration_index: leverage_iter_amount.unwrap_or_default(),
             cur_iteration_index: 0,
             initial_cdp_collateral_amount: Uint128::zero(),
             initial_cdp_loan_amount: Uint128::zero(),
             asset_price_in_collateral_asset: Decimal::zero(),
-            mirror_ts_factory_addr: Default::default(),
+            mirror_ts_factory_addr,
         }
     }
 }

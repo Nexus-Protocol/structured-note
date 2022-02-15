@@ -36,9 +36,11 @@ pub fn deposit_stable(deps: DepsMut, depositing_state: &mut DepositingState, dep
             contract_addr: config.anchor_market_contract.to_string(),
             msg: to_binary(&AnchorMarketMsg::DepositStable {})?,
             funds: vec![deposit_coin],
-        }), submsg_id)
-            .add_attributes(vec![
-                ("action", "deposit_stable_to_anchor_market"),
-                ("amount", &deposit_amount.to_string()),
-            ])))
+        }),
+                                                 submsg_id,
+        ))
+        .add_attributes(vec![
+            ("action", "deposit_stable_to_anchor_market"),
+            ("amount", &deposit_amount.to_string()),
+        ]))
 }

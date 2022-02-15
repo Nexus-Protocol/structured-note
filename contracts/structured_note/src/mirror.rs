@@ -5,8 +5,8 @@ use terraswap::asset::{Asset, AssetInfo};
 
 use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorCollateralOracleQueryMsg, MirrorCollateralPriceResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg, MirrorOracleQueryMsg, MirrorPriceResponse};
 
+use crate::{concat, SubmsgIds};
 use crate::state::{DepositingState, load_config, load_depositing_state};
-use crate::SubmsgIds;
 
 pub fn query_mirror_mint_config(deps: Deps, mirror_mint_contract: String) -> StdResult<MirrorMintConfigResponse> {
     let mirror_mint_config: MirrorMintConfigResponse =
@@ -23,9 +23,9 @@ pub fn query_masset_config(deps: Deps, masset_token: &Addr) -> StdResult<MirrorA
     let masset_config: StdResult<MirrorAssetConfigResponse> =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Raw {
             contract_addr: config.mirror_mint_contract.to_string(),
-            key: Binary::from(concat!(
-            &to_length_prefixed(b"asset_config"),
-            masset_token.as_bytes(),
+            key: Binary::from(concat(
+                &to_length_prefixed(b"asset_config"),
+                masset_token.as_bytes(),
             )),
         }));
 
@@ -47,9 +47,9 @@ pub fn query_cdp(deps: Deps, cdp_idx: Uint128) -> StdResult<CDPState> {
     let cdp: StdResult<MirrorCDPResponse> =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Raw {
             contract_addr: config.mirror_mint_contract.to_string(),
-            key: Binary::from(concat!(
-            &to_length_prefixed(b"position"),
-            cdp_idx.as_bytes(),
+            key: Binary::from(concat(
+                &to_length_prefixed(b"position"),
+                cdp_idx.to_string().as_bytes(),
             )),
         }));
 
