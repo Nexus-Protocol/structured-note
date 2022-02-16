@@ -23,6 +23,9 @@ pub fn instantiate(
     unimplemented!()
 }
 
+//TODO: v.0.2 check liquidity
+//TODO: v.0.2 check slippage
+//TODO: v.0.2 avoid send zero tokens issue: check deposit is enough to -> mint enough aterra to -> borrow enough masset to -> buy enough UST -> etc
 #[entry_point]
 pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     match msg {
