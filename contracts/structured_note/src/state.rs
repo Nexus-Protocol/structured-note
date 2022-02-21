@@ -52,7 +52,6 @@ pub struct Position {
     pub leverage_iter_amount: u8,
     pub total_loan_amount: Uint128,
     pub total_collateral_amount: Uint128,
-    pub aterra_in_contract: Uint128,
 }
 
 pub fn load_config(storage: &dyn Storage) -> StdResult<Config> {
@@ -89,15 +88,25 @@ pub fn remove_cdp(storage: &mut dyn Storage, masset_token: &Addr) {
     KEY_CDPS.remove(storage, masset_token)
 }
 
-pub fn add_farmer_to_cdp(storage: &mut dyn Storage, masset_token: &Addr, farmer_addr: &Addr) -> StdResult<CDP> {
-    KEY_CDPS.update(
-        storage,
-        masset_token,
-        |cdp_opt| -> StdResult<_> {
-            let mut cdp = cdp_opt.unwrap();
-            cdp.farmers.push(farmer_addr.clone());
-            Ok(cdp)
-        })
+pub fn update_cdp(storage: &mut dyn Storage, depositing_state: &DepositingState) -> StdResult<CDP> {
+    let action = |cdp: Option<CDP>| -> StdResult<CDP> {
+        match cdp {
+            None => Ok(
+                CDP {
+                    idx: depositing_state.cdp_idx,
+                    masset_token: depositing_state.masset_token.clone(),
+                    farmers: vec![depositing_state.farmer_addr.clone()],
+                }
+            ),
+            Some(mut cdp) => {
+                if !cdp.farmers.contains(&depositing_state.farmer_addr) {
+                    cdp.farmers.push(depositing_state.farmer_addr.clone());
+                }
+                Ok(cdp)
+            }
+        }
+    };
+    KEY_CDPS.update(storage, &depositing_state.masset_token, action)
 }
 
 pub fn load_depositing_state(storage: &dyn Storage) -> StdResult<DepositingState> {
@@ -108,28 +117,42 @@ pub fn store_depositing_state(storage: &mut dyn Storage, data: &DepositingState)
     KEY_DEPOSITING.save(storage, data)
 }
 
+pub fn increment_iteration_index(storage: &mut dyn Storage) -> StdResult<DepositingState> {
+    KEY_DEPOSITING.update(storage, |mut ds: DepositingState| -> StdResult<DepositingState> {
+        ds.cur_iteration_index += 1;
+        Ok(ds)
+    })
+}
+
 pub fn load_position(storage: &dyn Storage, farmer_addr: &Addr, masset_token: &Addr) -> StdResult<Position> {
     KEY_POSITIONS.load(storage, (farmer_addr, masset_token))
 }
 
-pub fn update_position_on_deposit(
-    storage: &mut dyn Storage,
-    masset_token: &Addr,
-    farmer_addr: &Addr,
-    loan_diff: Uint128,
-    collateral_diff: Uint128,
-    aterra_amount_in_contract: Uint128,
+pub fn upsert_position(storage: &mut dyn Storage,
+                       depositing_state: &DepositingState,
+                       loan_diff: Uint128,
+                       collateral_diff: Uint128,
 ) -> StdResult<Position> {
-    KEY_POSITIONS.update(
-        storage,
-        (farmer_addr, masset_token),
-        |position_opt| -> StdResult<_> {
-            let mut position = position_opt.unwrap();
-            position.total_collateral_amount += collateral_diff;
-            position.total_loan_amount += loan_diff;
-            position.aterra_in_contract = aterra_amount_in_contract;
-            Ok(position)
-        })
+    let action = |p: Option<Position>| -> StdResult<Position> {
+        match p {
+            None => Ok(
+                Position {
+                    farmer_addr: depositing_state.farmer_addr.clone(),
+                    masset_token: depositing_state.masset_token.clone(),
+                    cdp_idx: depositing_state.cdp_idx,
+                    leverage_iter_amount: depositing_state.max_iteration_index,
+                    total_loan_amount: loan_diff,
+                    total_collateral_amount: collateral_diff,
+                }
+            ),
+            Some(mut position) => {
+                position.total_collateral_amount += collateral_diff;
+                position.total_loan_amount += loan_diff;
+                Ok(position)
+            }
+        }
+    };
+    KEY_POSITIONS.update(storage, (&depositing_state.farmer_addr, &depositing_state.masset_token), action)
 }
 
 pub fn load_all_positions(storage: &dyn Storage) -> StdResult<Vec<Position>> {
@@ -144,7 +167,6 @@ pub fn load_all_positions(storage: &dyn Storage) -> StdResult<Vec<Position>> {
                 leverage_iter_amount: v.leverage_iter_amount,
                 total_loan_amount: v.total_loan_amount,
                 total_collateral_amount: v.total_collateral_amount,
-                aterra_in_contract: v.aterra_in_contract,
             })
         })
         .collect()
@@ -163,7 +185,6 @@ pub fn load_positions_by_farmer_addr(storage: &dyn Storage, farmer_addr: &Addr) 
                 leverage_iter_amount: v.leverage_iter_amount,
                 total_loan_amount: v.total_loan_amount,
                 total_collateral_amount: v.total_collateral_amount,
-                aterra_in_contract: v.aterra_in_contract,
             })
         })
         .collect()

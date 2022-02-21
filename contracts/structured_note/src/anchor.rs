@@ -14,13 +14,8 @@ pub fn deposit_stable(deps: DepsMut, depositing_state: &mut DepositingState, dep
         amount: deposit_amount.into(),
     };
 
-    // Every iteration starts with iteration index incrementation, cause every iteration starts/ends here
-    depositing_state.cur_iteration_index += 1;
-
     let submsg_id =
-        if depositing_state.cur_iteration_index == depositing_state.max_iteration_index {
-            SubmsgIds::Exit.id()
-        } else if depositing_state.cdp_idx == Uint128::zero() {
+        if depositing_state.cdp_idx == Uint128::zero() {
             SubmsgIds::OpenCDP.id()
         } else {
             SubmsgIds::DepositToCDP.id()

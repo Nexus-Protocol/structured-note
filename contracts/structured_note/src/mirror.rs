@@ -6,7 +6,7 @@ use terraswap::asset::{Asset, AssetInfo};
 use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorCollateralOracleQueryMsg, MirrorCollateralPriceResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg, MirrorOracleQueryMsg, MirrorPriceResponse};
 
 use crate::{concat, SubmsgIds};
-use crate::state::{DepositingState, load_config, load_depositing_state};
+use crate::state::{DepositingState, increment_iteration_index, load_config, load_depositing_state};
 
 pub fn query_mirror_mint_config(deps: Deps, mirror_mint_contract: String) -> StdResult<MirrorMintConfigResponse> {
     let mirror_mint_config: MirrorMintConfigResponse =
@@ -117,7 +117,17 @@ pub fn open_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResult<Res
 
 pub fn deposit_to_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResult<Response> {
     let config = load_config(deps.storage)?;
-    let depositing_state = load_depositing_state(deps.storage)?;
+    //Increment iteration index here 'cause exit is on this step
+    let depositing_state = increment_iteration_index(deps.storage)?;
+
+    // Every iteration starts with iteration index incrementation, cause every iteration starts/ends here
+
+    let submsg_id =
+        if depositing_state.cur_iteration_index == depositing_state.max_iteration_index {
+            SubmsgIds::Exit.id()
+        } else {
+            SubmsgIds::MintAssetWithAimCollateralRatio.id()
+        };
 
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
@@ -132,7 +142,7 @@ pub fn deposit_to_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResu
                 })?,
                 funds: vec![],
             }),
-            SubmsgIds::MintAssetWithAimCollateralRatio.id(),
+            submsg_id,
         ))
         .add_attributes(vec![
             ("action", "deposit_to_cdp"),

@@ -139,9 +139,7 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
             deposit_stable_on_reply(deps, depositing_state, Uint256::from_str(&received_stable)?)
         },
         SubmsgIds::Exit => {
-            let events = msg.result.unwrap().events;
-            let received_aterra_amount = get_amount_from_response_raw_attr(events, "mint_amount".to_string())?;
-            store_position_and_exit(deps, Uint128::from_str(&received_aterra_amount)?)
+            store_position_and_exit(deps)
         }
     }
 }
