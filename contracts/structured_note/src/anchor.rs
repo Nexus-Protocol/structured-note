@@ -36,3 +36,5 @@ pub fn deposit_stable(deps: DepsMut, depositing_state: &mut DepositingState, dep
             ("amount", &deposit_amount.to_string()),
         ]))
 }
+
+pub fn redeem_stable() -> StdResult<Response> {}

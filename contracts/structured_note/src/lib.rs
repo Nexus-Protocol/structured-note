@@ -11,13 +11,15 @@ mod commands;
 mod utils;
 
 pub enum SubmsgIds {
+    //Deposit
     OpenCDP,
     DepositToCDP,
     MintAssetWithAimCollateralRatio,
     SellAsset,
     DepositStableOnReply,
-    //last deposit to anchor and exit (no submsgs)
     Exit,
+    //Withdraw
+    RedeemStable,
 }
 
 impl TryFrom<u64> for SubmsgIds {
@@ -31,6 +33,7 @@ impl TryFrom<u64> for SubmsgIds {
             x if x == SubmsgIds::SellAsset.id() => Ok(SubmsgIds::SellAsset),
             x if x == SubmsgIds::DepositStableOnReply.id() => Ok(SubmsgIds::DepositStableOnReply),
             x if x == SubmsgIds::Exit.id() => Ok(SubmsgIds::Exit),
+            x if x == SubmsgIds::RedeemStable.id() => Ok(SubmsgIds::RedeemStable),
             unknown => Err(StdError::generic_err(format!(
                 "unknown reply message id: {}",
                 unknown
@@ -48,6 +51,7 @@ impl SubmsgIds {
             SubmsgIds::SellAsset => 3,
             SubmsgIds::DepositStableOnReply => 4,
             SubmsgIds::Exit => 5,
+            SubmsgIds::RedeemStable => 6,
         }
     }
 }

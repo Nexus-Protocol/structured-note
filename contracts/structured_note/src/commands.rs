@@ -1,11 +1,11 @@
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{DepsMut, Response, StdError, StdResult};
+use cosmwasm_std::{Addr, DepsMut, Response, StdError, StdResult, Uint128};
 
 use structured_note_package::mirror::MirrorAssetConfigResponse;
 
 use crate::anchor::deposit_stable as anc_deposit_stable;
-use crate::mirror::query_cdp;
-use crate::state::{DepositingState, load_cdp, load_depositing_state, load_position, update_cdp, upsert_position};
+use crate::mirror::{get_asset_price_in_collateral_asset, query_cdp, query_mirror_mint_config, withdraw_collateral};
+use crate::state::{DepositingState, load_cdp, load_config, load_depositing_state, load_position, update_cdp, upsert_position};
 
 pub fn deposit_stable(
     deps: DepsMut,
@@ -63,4 +63,23 @@ pub fn store_position_and_exit(deps: DepsMut) -> StdResult<Response> {
 
     Ok(Response::new()
         .add_attribute("method", "store_and_exit"))
+}
+
+pub fn withdraw_stable(deps: DepsMut, farmer_addr: &Addr, masset_token: &Addr, amount: Uint128) -> StdResult<Response> {
+    let position_res = load_position(deps.storage, farmer_addr, masset_token);
+    match position_res {
+        Err(_) => Err(StdError::generic_err("Fail to read position")),
+        Ok(position) => {
+            if &position.farmer_addr != farmer_addr {
+                return Err(StdError::generic_err("Unauthorized"));
+            }
+            let config = load_config(deps.storage)?;
+            let mirror_mint_config = query_mirror_mint_config(deps.as_ref(), config.mirror_mint_contract.to_string())?;
+
+            let asset_price_in_collateral_asset = get_asset_price_in_collateral_asset(deps.as_ref(), &mirror_mint_config, &config, &position.masset_token)?;
+
+            let amount_to_withdraw = amount * asset_price_in_collateral_asset;
+            withdraw_collateral(&config, position.cdp_idx, amount_to_withdraw)
+        }
+    }
 }

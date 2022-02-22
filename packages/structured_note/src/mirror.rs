@@ -11,6 +11,10 @@ pub enum MirrorMintExecuteMsg {
         asset: Asset,
         short_params: Option<()>,
     },
+    Withdraw {
+        position_idx: Uint128,
+        collateral: Option<Asset>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

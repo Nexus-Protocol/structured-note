@@ -6,7 +6,8 @@ use terraswap::asset::{Asset, AssetInfo};
 use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorCollateralOracleQueryMsg, MirrorCollateralPriceResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg, MirrorOracleQueryMsg, MirrorPriceResponse};
 
 use crate::{concat, SubmsgIds};
-use crate::state::{DepositingState, increment_iteration_index, load_config, load_depositing_state};
+use crate::state::{Config, DepositingState, increment_iteration_index, load_config, load_depositing_state};
+use crate::utils::decimal_division;
 
 pub fn query_mirror_mint_config(deps: Deps, mirror_mint_contract: String) -> StdResult<MirrorMintConfigResponse> {
     let mirror_mint_config: MirrorMintConfigResponse =
@@ -82,6 +83,16 @@ pub fn query_asset_price(deps: Deps, oracle_addr: &Addr, asset_addr: &Addr, base
         })?,
     }))?;
     Ok(res.rate)
+}
+
+pub fn get_asset_price_in_collateral_asset(deps: Deps, mirror_mint_config: &MirrorMintConfigResponse, config: &Config, masset_token: &Addr) -> StdResult<Decimal> {
+    let collateral_oracle = deps.api.addr_validate(&mirror_mint_config.collateral_oracle)?;
+    let collateral_price = query_collateral_price(deps, &collateral_oracle, &config.aterra_addr)?;
+
+    let oracle_addr = deps.api.addr_validate(&mirror_mint_config.oracle)?;
+    let asset_price = query_asset_price(deps, &oracle_addr, masset_token, config.stable_denom.clone())?;
+
+    Ok(decimal_division(collateral_price, asset_price))
 }
 
 pub fn open_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResult<Response> {
@@ -173,4 +184,24 @@ pub fn mint_to_cdp(deps: Deps, depositing_state: &DepositingState, amount_to_min
             ("masset_token", &depositing_state.masset_token.to_string()),
             ("mint_amount", &amount_to_mint.to_string()),
         ]))
+}
+
+pub fn withdraw_collateral(config: &Config, cdp_idx: Uint128, amount_to_withdraw: Uint128) -> StdResult<Response> {
+    Ok(Response::new()
+        .add_submessage(SubMsg::reply_on_success(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: config.mirror_mint_contract.to_string(),
+            msg: to_binary(&MirrorMintExecuteMsg::Withdraw {
+                position_idx: cdp_idx.clone(),
+                collateral: Some(Asset {
+                    info: AssetInfo::Token { contract_addr: config.aterra_addr.to_string() },
+                    amount: amount_to_withdraw.clone(),
+                }),
+            })?,
+            funds: vec![],
+        }), SubmsgIds::RedeemStable.id(),
+        )).add_attributes(vec![
+        ("action", "withdraw_collateral"),
+        ("cdp_idx", &cdp_idx.to_string()),
+        ("amount", &amount_to_withdraw.to_string()),
+    ]))
 }
