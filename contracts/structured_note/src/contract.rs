@@ -6,11 +6,12 @@ use cosmwasm_std::{Binary, Decimal, Deps, DepsMut, entry_point, Env, MessageInfo
 
 use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
+use crate::anchor::redeem_stable;
 use crate::commands::{deposit_stable, deposit_stable_on_reply, store_position_and_exit, validate_masset, withdraw_stable};
 use crate::mirror::{deposit_to_cdp, get_asset_price_in_collateral_asset, mint_to_cdp, open_cdp, query_masset_config, query_mirror_mint_config};
 use crate::state::{DepositingState, load_config, load_depositing_state};
 use crate::SubmsgIds;
-use crate::terraswap::sell_asset;
+use crate::terraswap::{buy_asset, sell_asset};
 use crate::utils::{decimal_multiplication, get_amount_from_response_asset_as_string_attr, get_amount_from_response_raw_attr, reverse_decimal};
 
 #[entry_point]
@@ -61,7 +62,7 @@ pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> 
             validate_masset(&masset_config)?;
             let mut depositing_state = DepositingState::template(
                 info.sender.clone(),
-                masset_token,
+                masset_token.clone(),
                 aim_collateral_ratio,
                 leverage_iter_amount,
                 deps.api.addr_validate(&mirror_mint_config.terraswap_factory)?,
@@ -145,8 +146,16 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
         SubmsgIds::RedeemStable => {
             let events = msg.result.unwrap().events;
             let received_aterra_amount = get_amount_from_response_asset_as_string_attr(events, "withdraw_amount".to_string())?;
-            redeem_stable()
+            let config = load_config(deps.storage)?;
+            redeem_stable(config, Uint128::from_str(&received_aterra_amount)?)
         }
+        SubmsgIds::BuyAsset => {
+            let events = msg.result.unwrap().events;
+            let received_stable_amount = get_amount_from_response_raw_attr(events, "redeem_amount".to_string())?;
+            let config = load_config(deps.storage)?;
+            buy_asset()
+        }
+        SubmsgIds::BurnAsset => {}
     }
 }
 

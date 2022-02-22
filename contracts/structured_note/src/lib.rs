@@ -20,6 +20,9 @@ pub enum SubmsgIds {
     Exit,
     //Withdraw
     RedeemStable,
+    BuyAsset,
+    BurnAsset,
+
 }
 
 impl TryFrom<u64> for SubmsgIds {
@@ -52,6 +55,8 @@ impl SubmsgIds {
             SubmsgIds::DepositStableOnReply => 4,
             SubmsgIds::Exit => 5,
             SubmsgIds::RedeemStable => 6,
+            SubmsgIds::BuyAsset => 7,
+            SubmsgIds::BurnAsset => 8,
         }
     }
 }
