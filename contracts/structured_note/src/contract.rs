@@ -95,20 +95,22 @@ pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> 
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
+    let events = match msg.result {
+        ContractResult::Ok(result) => result.events,
+        ContractResult::Err(e) => return Err(StdError::generic_err("Fail to parse reply response")),
+    };
+
     let submessage_enum = SubmsgIds::try_from(msg.id)?;
     match submessage_enum {
         SubmsgIds::OpenCDP => {
-            let events = msg.result.unwrap().events;
             let received_aterra_amount = get_amount_from_response_raw_attr(events, "mint_amount".to_string())?;
             open_cdp(deps, Uint128::from_str(&received_aterra_amount)?)
         }
         SubmsgIds::DepositToCDP => {
-            let events = msg.result.unwrap().events;
             let received_farmer_amount = get_amount_from_response_raw_attr(events, "mint_amount".to_string())?;
             deposit_to_cdp(deps, Uint128::from_str(&received_farmer_amount)?)
         }
         SubmsgIds::MintAssetWithAimCollateralRatio => {
-            let events = msg.result.unwrap().events;
             let deposited_amount = get_amount_from_response_asset_as_string_attr(events.clone(), "deposit_amount".to_string())?;
             let cdp_idx = get_amount_from_response_raw_attr(events, "position_idx".to_string())?;
 
@@ -124,7 +126,6 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
             mint_to_cdp(deps.as_ref(), &state, mint_amount)
         }
         SubmsgIds::SellAsset => {
-            let events = msg.result.unwrap().events;
             let minted_amount = get_amount_from_response_asset_as_string_attr(events.clone(), "mint_amount".to_string())?;
             let cdp_idx = get_amount_from_response_raw_attr(events, "position_idx".to_string())?;
             let mut state = load_state(deps.storage)?;
@@ -134,7 +135,6 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
             sell_asset(env, &state, Uint128::from_str(&minted_amount)?)
         }
         SubmsgIds::DepositStableOnReply => {
-            let events = msg.result.unwrap().events;
             let received_stable = get_amount_from_response_raw_attr(events, "return_amount".to_string())?;
             let state = load_state(deps.storage)?;
             deposit_stable_on_reply(deps, state, Uint256::from_str(&received_stable)?)
@@ -143,17 +143,15 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
             store_position_and_exit(deps)
         }
         SubmsgIds::RedeemStable => {
-            let events = msg.result.unwrap().events;
             let received_aterra_amount = get_amount_from_response_asset_as_string_attr(events, "withdraw_amount".to_string())?;
             let config = load_config(deps.storage)?;
             redeem_stable(config, Uint128::from_str(&received_aterra_amount)?)
         }
         SubmsgIds::BuyAsset => {
-            let events = msg.result.unwrap().events;
             let received_stable_amount = get_amount_from_response_raw_attr(events, "redeem_amount".to_string())?;
             let config = load_config(deps.storage)?;
 
-            buy_asset(env, masset_token, mirror_ts_factory_addr, Uint128::from_str(&received_stable_amount)?);
+            buy_asset(env, masset_token, mirror_ts_factory_addr, Uint128::from_str(&received_stable_amount)?)
         }
         SubmsgIds::BurnAsset => {}
     }
