@@ -4,10 +4,10 @@ use cw20::Cw20ExecuteMsg;
 
 use structured_note_package::anchor::{AnchorMarketMsg, MirrorMintCW20HookMsg};
 
-use crate::state::{Config, DepositingState, load_config, store_depositing_state};
+use crate::state::{Config, load_config, State, store_state};
 use crate::SubmsgIds;
 
-pub fn deposit_stable(deps: DepsMut, depositing_state: &mut DepositingState, deposit_amount: Uint256) -> StdResult<Response> {
+pub fn deposit_stable(deps: DepsMut, state: &mut State, deposit_amount: Uint256) -> StdResult<Response> {
     let config = load_config(deps.storage)?;
 
     let deposit_coin = Coin {
@@ -16,21 +16,18 @@ pub fn deposit_stable(deps: DepsMut, depositing_state: &mut DepositingState, dep
     };
 
     let submsg_id =
-        if depositing_state.cdp_idx == Uint128::zero() {
+        if state.cdp_idx.is_none() {
             SubmsgIds::OpenCDP.id()
         } else {
             SubmsgIds::DepositToCDP.id()
         };
-
-    store_depositing_state(deps.storage, depositing_state)?;
 
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.anchor_market_contract.to_string(),
             msg: to_binary(&AnchorMarketMsg::DepositStable {})?,
             funds: vec![deposit_coin],
-        }),
-                                                 submsg_id,
+        }), submsg_id,
         ))
         .add_attributes(vec![
             ("action", "deposit_stable_to_anchor_market"),

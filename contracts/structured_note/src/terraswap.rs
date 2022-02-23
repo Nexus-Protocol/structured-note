@@ -6,7 +6,7 @@ use terraswap::querier::query_pair_info;
 
 use structured_note_package::mirror::MirrorMintConfigResponse;
 
-use crate::state::{Config, DepositingState, load_config, Position};
+use crate::state::{Config, load_config, Position, State};
 use crate::SubmsgIds;
 
 pub fn query_pair_addr(deps: Deps, terraswap_factory_addr: &Addr, masset_token: &Addr) -> StdResult<String> {
@@ -26,13 +26,13 @@ pub fn query_pair_addr(deps: Deps, terraswap_factory_addr: &Addr, masset_token: 
     Ok(pair_info.contract_addr)
 }
 
-pub fn sell_asset(env: Env, depositing_state: &DepositingState, minted_amount: Uint128) -> StdResult<Response> {
+pub fn sell_asset(env: Env, state: &State, minted_amount: Uint128) -> StdResult<Response> {
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
             CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: depositing_state.masset_token.to_string(),
+                contract_addr: state.masset_token.to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Send {
-                    contract: depositing_state.mirror_ts_factory_addr.to_string(),
+                    contract: state.mirror_ts_factory_addr.to_string(),
                     amount: minted_amount,
                     msg: to_binary(&Swap {
                         belief_price: None,
@@ -46,7 +46,7 @@ pub fn sell_asset(env: Env, depositing_state: &DepositingState, minted_amount: U
         ))
         .add_attributes(vec![
             ("action", "sell_asset"),
-            ("masset_token", &depositing_state.masset_token.to_string()),
+            ("masset_token", &state.masset_token.to_string()),
             ("amount_to_sell", &minted_amount.to_string()),
         ]))
 }

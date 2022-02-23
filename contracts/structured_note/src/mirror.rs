@@ -6,7 +6,7 @@ use terraswap::asset::{Asset, AssetInfo};
 use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorCollateralOracleQueryMsg, MirrorCollateralPriceResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg, MirrorOracleQueryMsg, MirrorPriceResponse};
 
 use crate::{concat, SubmsgIds};
-use crate::state::{Config, DepositingState, increment_iteration_index, load_config, load_depositing_state};
+use crate::state::{Config, increment_iteration_index, load_config, load_state, State};
 use crate::utils::decimal_division;
 
 pub fn query_mirror_mint_config(deps: Deps, mirror_mint_contract: String) -> StdResult<MirrorMintConfigResponse> {
@@ -97,44 +97,54 @@ pub fn get_asset_price_in_collateral_asset(deps: Deps, mirror_mint_config: &Mirr
 
 pub fn open_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResult<Response> {
     let config = load_config(deps.storage)?;
-    let depositing_state = load_depositing_state(deps.storage)?;
-
-    Ok(Response::new()
-        .add_submessage(SubMsg::reply_on_success(
-            CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: config.aterra_addr.to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::Send {
-                    contract: config.mirror_mint_contract.to_string(),
-                    amount: received_aterra_amount,
-                    msg: to_binary(&MirrorMintCW20HookMsg::OpenPosition {
-                        asset_info: AssetInfo::Token {
-                            contract_addr: depositing_state.masset_token.to_string()
-                        },
-                        collateral_ratio: depositing_state.aim_collateral_ratio,
-                        short_params: None,
+    let state = load_state(deps.storage)?;
+    if let Some(aim_collateral_ratio) = state.aim_collateral_ratio {
+        Ok(Response::new()
+            .add_submessage(SubMsg::reply_on_success(
+                CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: config.aterra_addr.to_string(),
+                    msg: to_binary(&Cw20ExecuteMsg::Send {
+                        contract: config.mirror_mint_contract.to_string(),
+                        amount: received_aterra_amount,
+                        msg: to_binary(&MirrorMintCW20HookMsg::OpenPosition {
+                            asset_info: AssetInfo::Token {
+                                contract_addr: state.masset_token.to_string()
+                            },
+                            collateral_ratio: aim_collateral_ratio,
+                            short_params: None,
+                        })?,
                     })?,
-                })?,
-                funds: vec![],
-            }),
-            SubmsgIds::SellAsset.id(),
-        ))
-        .add_attributes(vec![
-            ("action", "open_cdp"),
-            ("collateral_amount", &received_aterra_amount.to_string()),
-            ("masset_token", &depositing_state.masset_token.to_string()),
-            ("aim_collateral_ratio", &depositing_state.aim_collateral_ratio.to_string()),
-        ]))
+                    funds: vec![],
+                }),
+                SubmsgIds::SellAsset.id(),
+            ))
+            .add_attributes(vec![
+                ("action", "open_cdp"),
+                ("collateral_amount", &received_aterra_amount.to_string()),
+                ("masset_token", &state.masset_token.to_string()),
+                ("aim_collateral_ratio", &state.aim_collateral_ratio.unwrap().to_string()),
+            ]))
+    } else {
+        Err(StdError::generic_err("state.aim_collateral_ratio cant be None here"))
+    }
 }
 
 pub fn deposit_to_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResult<Response> {
     let config = load_config(deps.storage)?;
     //Increment iteration index here 'cause exit is on this step
-    let depositing_state = increment_iteration_index(deps.storage)?;
+    let state = increment_iteration_index(deps.storage)?;
 
-    // Every iteration starts with iteration index incrementation, cause every iteration starts/ends here
+    //Impossible max_iteration_index is still None here, but checked on prototype stage
+    if let None = state.max_iteration_index {
+        return Err(StdError::generic_err("There isn't leverage_iter_amount in execute_msg nor in the stored data."));
+    }
+    //Impossible cdp_idx is None here, it would be another subMsq, but checked on prototype stage
+    if let None = state.cdp_idx {
+        return Err(StdError::generic_err("cdp_idx is None in deposit_to_cdp"));
+    }
 
     let submsg_id =
-        if depositing_state.cur_iteration_index == depositing_state.max_iteration_index {
+        if state.cur_iteration_index == state.max_iteration_index.unwrap() {
             SubmsgIds::Exit.id()
         } else {
             SubmsgIds::MintAssetWithAimCollateralRatio.id()
@@ -148,7 +158,7 @@ pub fn deposit_to_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResu
                     contract: config.mirror_mint_contract.to_string(),
                     amount: received_aterra_amount,
                     msg: to_binary(&MirrorMintCW20HookMsg::Deposit {
-                        position_idx: depositing_state.cdp_idx
+                        position_idx: state.cdp_idx.unwrap()
                     })?,
                 })?,
                 funds: vec![],
@@ -158,20 +168,20 @@ pub fn deposit_to_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResu
         .add_attributes(vec![
             ("action", "deposit_to_cdp"),
             ("collateral_amount", &received_aterra_amount.to_string()),
-            ("masset_token", &depositing_state.masset_token.to_string()),
+            ("masset_token", &state.masset_token.to_string()),
         ]))
 }
 
-pub fn mint_to_cdp(deps: Deps, depositing_state: &DepositingState, amount_to_mint: Uint128) -> StdResult<Response> {
+pub fn mint_to_cdp(deps: Deps, state: &State, amount_to_mint: Uint128) -> StdResult<Response> {
     let config = load_config(deps.storage)?;
 
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.mirror_mint_contract.to_string(),
             msg: to_binary(&MirrorMintExecuteMsg::Mint {
-                position_idx: depositing_state.cdp_idx,
+                position_idx: state.cdp_idx.unwrap(),
                 asset: Asset {
-                    info: AssetInfo::Token { contract_addr: depositing_state.masset_token.to_string() },
+                    info: AssetInfo::Token { contract_addr: state.masset_token.to_string() },
                     amount: amount_to_mint,
                 },
                 short_params: None,
@@ -181,7 +191,7 @@ pub fn mint_to_cdp(deps: Deps, depositing_state: &DepositingState, amount_to_min
         ))
         .add_attributes(vec![
             ("action", "mint_asset"),
-            ("masset_token", &depositing_state.masset_token.to_string()),
+            ("masset_token", &state.masset_token.to_string()),
             ("mint_amount", &amount_to_mint.to_string()),
         ]))
 }

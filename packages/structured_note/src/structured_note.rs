@@ -10,13 +10,18 @@ pub struct InstantiateMsg {}
 pub enum ExecuteMsg {
     DepositStable {
         masset_token: String,
-        leverage_iter_amount: Option<u8>,
-        aim_collateral_ratio: Option<Decimal>,
+        new_position_info: Option<NewPositionInfo>,
     },
     WithdrawStable {
         masset_token: String,
         amount: Uint128,
     },
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct NewPositionInfo {
+    pub leverage_iter_amount: u8,
+    pub aim_collateral_ratio: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
