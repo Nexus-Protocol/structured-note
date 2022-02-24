@@ -10,7 +10,7 @@ pub struct InstantiateMsg {}
 pub enum ExecuteMsg {
     DepositStable {
         masset_token: String,
-        new_position_info: Option<NewPositionInfo>,
+        leverage_info: Option<LeverageInfo>,
     },
     WithdrawStable {
         masset_token: String,
@@ -19,7 +19,7 @@ pub enum ExecuteMsg {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct NewPositionInfo {
+pub struct LeverageInfo {
     pub leverage_iter_amount: u8,
     pub aim_collateral_ratio: Decimal,
 }

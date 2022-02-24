@@ -7,16 +7,14 @@ use structured_note_package::anchor::{AnchorMarketMsg, MirrorMintCW20HookMsg};
 use crate::state::{Config, load_config, State, store_state};
 use crate::SubmsgIds;
 
-pub fn deposit_stable(deps: DepsMut, state: &mut State, deposit_amount: Uint256) -> StdResult<Response> {
-    let config = load_config(deps.storage)?;
-
+pub fn deposit_stable(config: Config, open_cdp: bool, deposit_amount: Uint256) -> StdResult<Response> {
     let deposit_coin = Coin {
         denom: config.stable_denom.clone(),
         amount: deposit_amount.into(),
     };
 
     let submsg_id =
-        if state.cdp_idx.is_none() {
+        if open_cdp {
             SubmsgIds::OpenCDP.id()
         } else {
             SubmsgIds::DepositToCDP.id()

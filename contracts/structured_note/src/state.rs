@@ -4,8 +4,12 @@ use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use structured_note_package::structured_note::LeverageInfo;
+
 static KEY_CONFIG: Item<Config> = Item::new("config");
 static KEY_STATE: Item<State> = Item::new("state");
+static KEY_LEVERAGE: Item<LeverageInfo> = Item::new("leverage");
+static KEY_INIT_CDP_STATE: Item<InitialCDPState> = Item::new("initial_cdp_state");
 // Map<cdp.masset_token, CDP>
 static KEY_CDPS: Map<&Addr, CDP> = Map::new("cdps");
 // Map<(position.farmer_addr, position.masset_token), Position>
@@ -33,18 +37,18 @@ pub struct CDP {
 //Store data for recursive deposit and withdraw
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
-    //could be none on deposit (the very first position with particular masset)
     pub cdp_idx: Option<Uint128>,
     pub farmer_addr: Addr,
     pub masset_token: Addr,
-    //Could be Some only on position creation (Currently farmer a not allowed to change this position parameter)
-    pub max_iteration_index: Option<u8>,
     pub cur_iteration_index: u8,
     pub asset_price_in_collateral_asset: Decimal,
     pub mirror_ts_factory_addr: Addr,
-    pub aim_collateral_ratio: Option<Decimal>,
-    pub initial_cdp_collateral_amount: Option<Uint128>,
-    pub initial_cdp_loan_amount: Option<Uint128>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct InitialCDPState {
+    pub collateral_amount: Uint128,
+    pub loan_amount: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -132,6 +136,32 @@ pub fn increment_iteration_index(storage: &mut dyn Storage) -> StdResult<State> 
     })
 }
 
+pub fn insert_state_cdp_idx(storage: &mut dyn Storage, cdp_idx: Uint128) -> StdResult<State> {
+    KEY_STATE.update(storage, |mut s: State| -> StdResult<State> {
+        if (s.cdp_idx.is_none()) {
+            s.cdp_idx = Some(cdp_idx);
+        }
+        Ok(s)
+    })
+}
+
+pub fn load_leverage_info(storage: &dyn Storage) -> StdResult<LeverageInfo> {
+    KEY_LEVERAGE.load(storage)
+}
+
+pub fn store_leverage_info(storage: &mut dyn Storage, data: &LeverageInfo) -> StdResult<()> {
+    KEY_LEVERAGE.save(storage, data)
+}
+
+pub fn load_initial_cdp_state(storage: &dyn Storage) -> StdResult<InitialCDPState> {
+    KEY_INIT_CDP_STATE.load(storage)
+}
+
+pub fn store_initial_cdp_state(storage: &mut dyn Storage, data: &InitialCDPState) -> StdResult<()> {
+    KEY_INIT_CDP_STATE.save(storage, data)
+}
+
+
 pub fn may_load_position(storage: &dyn Storage, farmer_addr: &Addr, masset_token: &Addr) -> StdResult<Option<Position>> {
     KEY_POSITIONS.may_load(storage, (farmer_addr, masset_token))
 }
@@ -142,6 +172,7 @@ pub fn load_position(storage: &dyn Storage, farmer_addr: &Addr, masset_token: &A
 
 pub fn upsert_position(storage: &mut dyn Storage,
                        state: &State,
+                       leverage_info: &LeverageInfo,
                        loan_diff: Uint128,
                        collateral_diff: Uint128,
 ) -> StdResult<Position> {
@@ -152,10 +183,10 @@ pub fn upsert_position(storage: &mut dyn Storage,
                     farmer_addr: state.farmer_addr.clone(),
                     masset_token: state.masset_token.clone(),
                     cdp_idx: state.cdp_idx.unwrap(),
-                    leverage_iter_amount: state.max_iteration_index.unwrap(),
+                    leverage_iter_amount: leverage_info.leverage_iter_amount,
+                    aim_collateral_ratio: leverage_info.aim_collateral_ratio,
                     total_loan_amount: loan_diff,
                     total_collateral_amount: collateral_diff,
-                    aim_collateral_ratio: state.aim_collateral_ratio.unwrap(),
                 }
             ),
             Some(mut position) => {
