@@ -1,12 +1,13 @@
-use cosmwasm_std::{Addr, CosmosMsg, Deps, Env, Response, StdResult, SubMsg, to_binary, Uint128, WasmMsg};
+use cosmwasm_std::{Addr, Coin, CosmosMsg, Deps, Env, Response, StdResult, SubMsg, to_binary, Uint128, WasmMsg};
 use cw20::Cw20ExecuteMsg;
-use terraswap::asset::{AssetInfo, PairInfo};
-use terraswap::pair::Cw20HookMsg::Swap;
+use terraswap::asset::{Asset, AssetInfo, PairInfo};
+use terraswap::pair::Cw20HookMsg::Swap as Cw20HookSwap;
+use terraswap::pair::ExecuteMsg::Swap;
 use terraswap::querier::query_pair_info;
 
 use structured_note_package::mirror::MirrorMintConfigResponse;
 
-use crate::state::{Config, load_config, Position, State};
+use crate::state::{Config, load_config, load_state, Position, State};
 use crate::SubmsgIds;
 
 pub fn query_pair_addr(deps: Deps, terraswap_factory_addr: &Addr, masset_token: &Addr) -> StdResult<String> {
@@ -32,9 +33,9 @@ pub fn sell_asset(env: Env, state: &State, minted_amount: Uint128) -> StdResult<
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: state.masset_token.to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Send {
-                    contract: state.mirror_ts_factory_addr.to_string(),
+                    contract: state.pair_addr.to_string(),
                     amount: minted_amount,
-                    msg: to_binary(&Swap {
+                    msg: to_binary(&Cw20HookSwap {
                         belief_price: None,
                         max_spread: None,
                         to: Some(env.contract.address.to_string()),
@@ -51,26 +52,32 @@ pub fn sell_asset(env: Env, state: &State, minted_amount: Uint128) -> StdResult<
         ]))
 }
 
-pub fn buy_asset(env: Env, masset_token: &Addr, mirror_ts_factory_addr: &Addr, minted_amount: Uint128) -> StdResult<Response> {
+pub fn buy_asset(deps: Deps, env: Env, stable_amount: Uint128) -> StdResult<Response> {
+    let config = load_config(deps.storage)?;
+    let state = load_state(deps.storage)?;
+
+    let offer_asset = Coin {
+        denom: config.stable_denom,
+        amount: stable_amount,
+    };
     Ok(Response::new()
-        .add_submessage(SubMsg::reply_on_success(
-            CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: masset_token.to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::Send {
-                    contract: mirror_ts_factory_addr.to_string(),
-                    amount: minted_amount,
-                    msg: to_binary(&Swap {
-                        belief_price: None,
-                        max_spread: None,
-                        to: Some(env.contract.address.to_string()),
-                    })?,
-                })?,
-                funds: vec![],
-            }),
-            SubmsgIds::BurnAsset.id(),
-        ))
+        .add_submessage(SubMsg::reply_on_success(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: state.pair_addr.to_string(),
+            msg: to_binary(&Swap {
+                offer_asset: Asset {
+                    info: AssetInfo::Token {
+                        contract_addr: state.masset_token.to_string(),
+                    },
+                    amount: stable_amount,
+                },
+                belief_price: None,
+                max_spread: None,
+                to: Some(env.contract.address.to_string()),
+            })?,
+            funds: vec![offer_asset],
+        }), SubmsgIds::BurnAsset.id()))
         .add_attributes(vec![
             ("action", "buy_asset"),
-            ("masset_token", &masset_token.to_string()),
+            ("offered_amount", &stable_amount.to_string()),
         ]))
 }

@@ -1,5 +1,5 @@
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{Coin, CosmosMsg, DepsMut, Response, StdResult, SubMsg, to_binary, Uint128, WasmMsg};
+use cosmwasm_std::{Coin, CosmosMsg, Deps, DepsMut, Response, StdResult, SubMsg, to_binary, Uint128, WasmMsg};
 use cw20::Cw20ExecuteMsg;
 
 use structured_note_package::anchor::{AnchorMarketMsg, MirrorMintCW20HookMsg};
@@ -33,7 +33,8 @@ pub fn deposit_stable(config: Config, open_cdp: bool, deposit_amount: Uint256) -
         ]))
 }
 
-pub fn redeem_stable(config: Config, amount: Uint128) -> StdResult<Response> {
+pub fn redeem_stable(deps: Deps, amount: Uint128) -> StdResult<Response> {
+    let config = load_config(deps.storage)?;
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
             CosmosMsg::Wasm(WasmMsg::Execute {

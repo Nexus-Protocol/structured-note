@@ -22,7 +22,7 @@ pub enum SubmsgIds {
     RedeemStable,
     BuyAsset,
     BurnAsset,
-
+    WithdrawCollateralOnReply,
 }
 
 impl TryFrom<u64> for SubmsgIds {
@@ -37,6 +37,9 @@ impl TryFrom<u64> for SubmsgIds {
             x if x == SubmsgIds::DepositStableOnReply.id() => Ok(SubmsgIds::DepositStableOnReply),
             x if x == SubmsgIds::Exit.id() => Ok(SubmsgIds::Exit),
             x if x == SubmsgIds::RedeemStable.id() => Ok(SubmsgIds::RedeemStable),
+            x if x == SubmsgIds::BuyAsset.id() => Ok(SubmsgIds::BuyAsset),
+            x if x == SubmsgIds::BurnAsset.id() => Ok(SubmsgIds::BurnAsset),
+            x if x == SubmsgIds::WithdrawCollateralOnReply.id() => Ok(SubmsgIds::WithdrawCollateralOnReply),
             unknown => Err(StdError::generic_err(format!(
                 "unknown reply message id: {}",
                 unknown
@@ -57,6 +60,7 @@ impl SubmsgIds {
             SubmsgIds::RedeemStable => 6,
             SubmsgIds::BuyAsset => 7,
             SubmsgIds::BurnAsset => 8,
+            SubmsgIds::WithdrawCollateralOnReply => 9,
         }
     }
 }

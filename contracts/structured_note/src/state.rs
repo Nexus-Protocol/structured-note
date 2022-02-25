@@ -42,7 +42,7 @@ pub struct State {
     pub masset_token: Addr,
     pub cur_iteration_index: u8,
     pub asset_price_in_collateral_asset: Decimal,
-    pub mirror_ts_factory_addr: Addr,
+    pub pair_addr: Addr,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

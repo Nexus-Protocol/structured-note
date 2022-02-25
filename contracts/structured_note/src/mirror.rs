@@ -215,3 +215,44 @@ pub fn withdraw_collateral(config: &Config, cdp_idx: Uint128, amount_to_withdraw
         ("amount", &amount_to_withdraw.to_string()),
     ]))
 }
+
+pub fn burn_asset(deps: DepsMut, return_amount: Uint128) -> StdResult<Response> {
+    let config = load_config(deps.storage)?;
+    //Increment iteration index here 'cause exit is on this step
+    let state = increment_iteration_index(deps.storage)?;
+    let leverage_info = load_leverage_info(deps.storage)?;
+
+    let cdp_idx = if let Some(i) = state.cdp_idx {
+        i
+    } else {
+        return Err(StdError::generic_err("cdp_idx has to be stored by now"));
+    };
+
+    let submsg_id =
+        if state.cur_iteration_index > leverage_info.leverage_iter_amount {
+            SubmsgIds::Exit.id()
+        } else {
+            SubmsgIds::WithdrawCollateralOnReply.id()
+        };
+
+    Ok(Response::new()
+        .add_submessage(SubMsg::reply_on_success(
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: state.masset_token.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Send {
+                    contract: config.mirror_mint_contract.to_string(),
+                    amount: return_amount,
+                    msg: to_binary(&MirrorMintCW20HookMsg::Burn {
+                        position_idx: cdp_idx,
+                    })?,
+                })?,
+                funds: vec![],
+            }),
+            submsg_id,
+        ))
+        .add_attributes(vec![
+            ("action", "burn_asset"),
+            ("cdp_idx", &cdp_idx.to_string()),
+            ("amount", &return_amount.to_string()),
+        ]))
+}
