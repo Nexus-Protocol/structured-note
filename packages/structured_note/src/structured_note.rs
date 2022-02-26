@@ -8,13 +8,22 @@ pub struct InstantiateMsg {}
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
-    DepositStable {
+    OpenPosition {
         masset_token: String,
-        leverage_info: Option<LeverageInfo>,
+        leverage: u8,
+        initial_collateral_ratio: Decimal,
     },
-    WithdrawStable {
+    Deposit {
+        masset_token: String,
+        aim_collateral_ratio: Decimal,
+    },
+    ClosePosition {
+        masset_token: String,
+    },
+    Withdraw {
         masset_token: String,
         amount: Uint128,
+        aim_collateral_ratio: Decimal,
     },
 }
 
@@ -28,4 +37,7 @@ pub struct LeverageInfo {
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     Config {},
+    Position {
+        masset_token: String,
+    }
 }
