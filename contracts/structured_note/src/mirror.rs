@@ -98,7 +98,6 @@ pub fn get_asset_price_in_collateral_asset(deps: Deps, mirror_mint_config: &Mirr
 pub fn open_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResult<Response> {
     let config = load_config(deps.storage)?;
     let state = load_state(deps.storage)?;
-    let leverage_info = load_leverage_info(deps.storage)?;
 
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
@@ -111,7 +110,7 @@ pub fn open_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResult<Res
                         asset_info: AssetInfo::Token {
                             contract_addr: state.masset_token.to_string()
                         },
-                        collateral_ratio: leverage_info.aim_collateral_ratio,
+                        collateral_ratio: state.aim_collateral_ratio,
                         short_params: None,
                     })?,
                 })?,
@@ -123,7 +122,7 @@ pub fn open_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResult<Res
             ("action", "open_cdp"),
             ("collateral_amount", &received_aterra_amount.to_string()),
             ("masset_token", &state.masset_token.to_string()),
-            ("aim_collateral_ratio", &leverage_info.aim_collateral_ratio.to_string()),
+            ("aim_collateral_ratio", &state.aim_collateral_ratio.to_string()),
         ]))
 }
 
@@ -131,7 +130,6 @@ pub fn deposit_to_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResu
     let config = load_config(deps.storage)?;
     //Increment iteration index here 'cause exit is on this step
     let state = increment_iteration_index(deps.storage)?;
-    let leverage_info = load_leverage_info(deps.storage)?;
 
     let cdp_idx = if let Some(i) = state.cdp_idx {
         i
@@ -140,10 +138,10 @@ pub fn deposit_to_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResu
     };
 
     let submsg_id =
-        if state.cur_iteration_index > leverage_info.leverage_iter_amount {
+        if state.cur_iteration_index > state.leverage {
             SubmsgIds::Exit.id()
         } else {
-            SubmsgIds::MintAssetWithAimCollateralRatio.id()
+            SubmsgIds::MintAsset.id()
         };
 
     Ok(Response::new()
@@ -168,7 +166,7 @@ pub fn deposit_to_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResu
         ]))
 }
 
-pub fn mint_to_cdp(config: Config, state: &State, amount_to_mint: Uint128) -> StdResult<Response> {
+pub fn mint_asset(config: Config, state: &State, amount_to_mint: Uint128) -> StdResult<Response> {
     let cdp_idx = if let Some(i) = state.cdp_idx {
         i
     } else {

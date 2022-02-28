@@ -4,11 +4,8 @@ use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use structured_note_package::structured_note::LeverageInfo;
-
 static KEY_CONFIG: Item<Config> = Item::new("config");
 static KEY_STATE: Item<State> = Item::new("state");
-static KEY_LEVERAGE: Item<LeverageInfo> = Item::new("leverage");
 static KEY_INIT_CDP_STATE: Item<InitialCDPState> = Item::new("initial_cdp_state");
 // Map<cdp.masset_token, CDP>
 static KEY_CDPS: Map<&Addr, CDP> = Map::new("cdps");
@@ -40,9 +37,11 @@ pub struct State {
     pub cdp_idx: Option<Uint128>,
     pub farmer_addr: Addr,
     pub masset_token: Addr,
+    pub leverage: u8,
     pub cur_iteration_index: u8,
     pub asset_price_in_collateral_asset: Decimal,
     pub pair_addr: Addr,
+    pub aim_collateral_ratio: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -56,7 +55,7 @@ pub struct Position {
     pub farmer_addr: Addr,
     pub masset_token: Addr,
     pub cdp_idx: Uint128,
-    pub leverage_iter_amount: u8,
+    pub leverage: u8,
     pub total_loan_amount: Uint128,
     pub total_collateral_amount: Uint128,
     pub aim_collateral_ratio: Decimal,
@@ -145,14 +144,6 @@ pub fn insert_state_cdp_idx(storage: &mut dyn Storage, cdp_idx: Uint128) -> StdR
     })
 }
 
-pub fn load_leverage_info(storage: &dyn Storage) -> StdResult<LeverageInfo> {
-    KEY_LEVERAGE.load(storage)
-}
-
-pub fn store_leverage_info(storage: &mut dyn Storage, data: &LeverageInfo) -> StdResult<()> {
-    KEY_LEVERAGE.save(storage, data)
-}
-
 pub fn load_initial_cdp_state(storage: &dyn Storage) -> StdResult<InitialCDPState> {
     KEY_INIT_CDP_STATE.load(storage)
 }
@@ -172,7 +163,6 @@ pub fn load_position(storage: &dyn Storage, farmer_addr: &Addr, masset_token: &A
 
 pub fn upsert_position(storage: &mut dyn Storage,
                        state: &State,
-                       leverage_info: &LeverageInfo,
                        loan_diff: Uint128,
                        collateral_diff: Uint128,
 ) -> StdResult<Position> {
@@ -183,8 +173,8 @@ pub fn upsert_position(storage: &mut dyn Storage,
                     farmer_addr: state.farmer_addr.clone(),
                     masset_token: state.masset_token.clone(),
                     cdp_idx: state.cdp_idx.unwrap(),
-                    leverage_iter_amount: leverage_info.leverage_iter_amount,
-                    aim_collateral_ratio: leverage_info.aim_collateral_ratio,
+                    leverage: state.leverage,
+                    aim_collateral_ratio: state.aim_collateral_ratio,
                     total_loan_amount: loan_diff,
                     total_collateral_amount: collateral_diff,
                 }
@@ -208,7 +198,7 @@ pub fn load_all_positions(storage: &dyn Storage) -> StdResult<Vec<Position>> {
                 farmer_addr: v.farmer_addr,
                 masset_token: v.masset_token,
                 cdp_idx: v.cdp_idx,
-                leverage_iter_amount: v.leverage_iter_amount,
+                leverage: v.leverage,
                 total_loan_amount: v.total_loan_amount,
                 total_collateral_amount: v.total_collateral_amount,
                 aim_collateral_ratio: v.aim_collateral_ratio,
@@ -227,7 +217,7 @@ pub fn load_positions_by_farmer_addr(storage: &dyn Storage, farmer_addr: &Addr) 
                 farmer_addr: v.farmer_addr,
                 masset_token: v.masset_token,
                 cdp_idx: v.cdp_idx,
-                leverage_iter_amount: v.leverage_iter_amount,
+                leverage: v.leverage,
                 total_loan_amount: v.total_loan_amount,
                 total_collateral_amount: v.total_collateral_amount,
                 aim_collateral_ratio: v.aim_collateral_ratio,

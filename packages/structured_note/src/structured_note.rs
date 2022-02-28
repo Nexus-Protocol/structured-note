@@ -28,12 +28,6 @@ pub enum ExecuteMsg {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct LeverageInfo {
-    pub leverage_iter_amount: u8,
-    pub aim_collateral_ratio: Decimal,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     Config {},

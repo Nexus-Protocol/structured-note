@@ -7,8 +7,8 @@ use cosmwasm_std::{Binary, ContractResult, Decimal, Deps, DepsMut, entry_point, 
 use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, LeverageInfo, QueryMsg};
 
 use crate::anchor::redeem_stable;
-use crate::commands::{deposit_stable, deposit_stable_on_reply, store_position_and_exit, validate_masset, withdraw_stable};
-use crate::mirror::{burn_asset, deposit_to_cdp, get_asset_price_in_collateral_asset, mint_to_cdp, open_cdp, query_cdp, query_masset_config, query_mirror_mint_config, withdraw_collateral};
+use crate::commands::{deposit, deposit_stable, deposit_stable_on_reply, open_position, store_position_and_exit, validate_masset, withdraw};
+use crate::mirror::{burn_asset, deposit_to_cdp, get_asset_price_in_collateral_asset, mint_asset, open_cdp, query_cdp, query_masset_config, query_mirror_mint_config, withdraw_collateral};
 use crate::state::{insert_state_cdp_idx, load_config, load_leverage_info, load_state, may_load_position, State, store_leverage_info};
 use crate::SubmsgIds;
 use crate::terraswap::{buy_asset, sell_asset};
@@ -30,14 +30,24 @@ pub fn instantiate(
 #[entry_point]
 pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     match msg {
-        ExecuteMsg::DepositStable {
+        ExecuteMsg::OpenPosition {
             masset_token,
-            leverage_info,
+            leverage,
+            initial_collateral_ratio,
         } => {
-            deposit_stable(deps, info, leverage_info, masset_token)
+            deposit(deps, info, masset_token, Some(leverage), initial_collateral_ratio)
+        },
+        ExecuteMsg::Deposit {
+            masset_token,
+            aim_collateral_ratio
+        } => {
+            deposit(deps, info, masset_token, None, aim_collateral_ratio)
+        },
+        ExecuteMsg::ClosePosition { masset_token } => {
+            withdraw(deps, info, masset_token)
         }
-        ExecuteMsg::WithdrawStable { masset_token, amount } => {
-            withdraw_stable(deps, info, masset_token, amount)
+        ExecuteMsg::Withdraw { masset_token, amount, aim_collateral_ratio } => {
+            withdraw(deps, info, masset_token, amount)
         }
     }
 }
@@ -59,18 +69,23 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
             let received_farmer_amount = Uint128::from_str(&get_amount_from_response_raw_attr(events, "mint_amount".to_string())?)?;
             deposit_to_cdp(deps, received_farmer_amount)
         }
-        SubmsgIds::MintAssetWithAimCollateralRatio => {
+        SubmsgIds::MintAsset => {
             let deposited_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events.clone(), "deposit_amount".to_string())?)?;
             let cdp_idx = Uint128::from_str(&get_amount_from_response_raw_attr(events, "position_idx".to_string())?)?;
 
             let state = insert_state_cdp_idx(deps.storage, cdp_idx)?;
-            let leverage_info = load_leverage_info(deps.storage)?;
 
             let config = load_config(deps.storage)?;
-            //TODO: check calculation results!!!
-            let mint_amount = deposited_amount * state.asset_price_in_collateral_asset * reverse_decimal(leverage_info.aim_collateral_ratio);
 
-            mint_to_cdp(config, &state, mint_amount)
+            //current collateral_amount = position.total_collateral + deposited_amount
+            //current loan_amount = position.total_loan
+            // ---- update position every iteration? or extend state with loan and collateral diff?
+            //mint amount = X - current loan_amount
+            // X = collateral_amount / (aim_collateral_ratio * asset_price_in_collateral_asset)
+            //TODO: collateral_ratio adjustment
+            let mint_amount = deposited_amount * state.asset_price_in_collateral_asset * reverse_decimal(state.aim_collateral_ratio);
+
+            mint_asset(config, &state, mint_amount)
         }
         SubmsgIds::SellAsset => {
             let minted_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events.clone(), "mint_amount".to_string())?)?;

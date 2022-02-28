@@ -14,7 +14,7 @@ pub enum SubmsgIds {
     //Deposit
     OpenCDP,
     DepositToCDP,
-    MintAssetWithAimCollateralRatio,
+    MintAsset,
     SellAsset,
     DepositStableOnReply,
     Exit,
@@ -32,7 +32,7 @@ impl TryFrom<u64> for SubmsgIds {
         match v {
             x if x == SubmsgIds::OpenCDP.id() => Ok(SubmsgIds::OpenCDP),
             x if x == SubmsgIds::DepositToCDP.id() => Ok(SubmsgIds::DepositToCDP),
-            x if x == SubmsgIds::MintAssetWithAimCollateralRatio.id() => Ok(SubmsgIds::MintAssetWithAimCollateralRatio),
+            x if x == SubmsgIds::MintAsset.id() => Ok(SubmsgIds::MintAsset),
             x if x == SubmsgIds::SellAsset.id() => Ok(SubmsgIds::SellAsset),
             x if x == SubmsgIds::DepositStableOnReply.id() => Ok(SubmsgIds::DepositStableOnReply),
             x if x == SubmsgIds::Exit.id() => Ok(SubmsgIds::Exit),
@@ -53,7 +53,7 @@ impl SubmsgIds {
         match self {
             SubmsgIds::OpenCDP => 0,
             SubmsgIds::DepositToCDP => 1,
-            SubmsgIds::MintAssetWithAimCollateralRatio => 2,
+            SubmsgIds::MintAsset => 2,
             SubmsgIds::SellAsset => 3,
             SubmsgIds::DepositStableOnReply => 4,
             SubmsgIds::Exit => 5,
