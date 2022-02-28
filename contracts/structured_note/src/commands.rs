@@ -7,7 +7,7 @@ use structured_note_package::structured_note::LeverageInfo;
 
 use crate::anchor::deposit_stable as anc_deposit_stable;
 use crate::mirror::{get_asset_price_in_collateral_asset, query_cdp, query_masset_config, query_mirror_mint_config, withdraw_collateral};
-use crate::state::{InitialCDPState, insert_state_cdp_idx, load_cdp, load_config, load_initial_cdp_state, load_leverage_info, load_position, load_state, may_load_cdp, may_load_position, Position, State, store_initial_cdp_state, store_leverage_info, store_state, update_cdp, upsert_position};
+use crate::state::{insert_state_cdp_idx, load_cdp, load_config, load_initial_cdp_state, load_position, load_state, may_load_cdp, may_load_position, Position, State, store_state, update_cdp, upsert_position};
 use crate::terraswap::query_pair_addr;
 use crate::utils::decimal_multiplication;
 
@@ -60,10 +60,8 @@ pub fn deposit(
             asset_price_in_collateral_asset,
             pair_addr,
             aim_collateral_ratio,
-        })?;
-        store_initial_cdp_state(deps.storage, &InitialCDPState {
-            collateral_amount: cdp_state.collateral_amount,
-            loan_amount: cdp_state.loan_amount,
+            loan_amount_diff: Default::default(),
+            collateral_amount_diff: Default::default(),
         })?;
     } else {
         if let Some(v) = leverage {
@@ -79,6 +77,8 @@ pub fn deposit(
                 asset_price_in_collateral_asset,
                 pair_addr,
                 aim_collateral_ratio,
+                loan_amount_diff: Default::default(),
+                collateral_amount_diff: Default::default(),
             })?;
         } else {
             return Err(StdError::generic_err(format!(
@@ -89,18 +89,8 @@ pub fn deposit(
         if let Some(cdp) = may_load_cdp(deps.storage, &masset_token)? {
             let cdp_state = query_cdp(deps.as_ref(), cdp.idx)?;
             insert_state_cdp_idx(deps.storage, cdp.idx)?;
-
-            store_initial_cdp_state(deps.storage, &InitialCDPState {
-                collateral_amount: cdp_state.collateral_amount,
-                loan_amount: cdp_state.loan_amount,
-            })?;
         } else {
             open_cdp = true;
-
-            store_initial_cdp_state(deps.storage, &InitialCDPState {
-                collateral_amount: Uint128::zero(),
-                loan_amount: Uint128::zero(),
-            })?;
         }
     }
 

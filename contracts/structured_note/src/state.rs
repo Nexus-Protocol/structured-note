@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 
 static KEY_CONFIG: Item<Config> = Item::new("config");
 static KEY_STATE: Item<State> = Item::new("state");
-static KEY_INIT_CDP_STATE: Item<InitialCDPState> = Item::new("initial_cdp_state");
 // Map<cdp.masset_token, CDP>
 static KEY_CDPS: Map<&Addr, CDP> = Map::new("cdps");
 // Map<(position.farmer_addr, position.masset_token), Position>
@@ -42,12 +41,8 @@ pub struct State {
     pub asset_price_in_collateral_asset: Decimal,
     pub pair_addr: Addr,
     pub aim_collateral_ratio: Decimal,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct InitialCDPState {
-    pub collateral_amount: Uint128,
-    pub loan_amount: Uint128,
+    pub loan_amount_diff: Uint128,
+    pub collateral_amount_diff: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -144,14 +139,19 @@ pub fn insert_state_cdp_idx(storage: &mut dyn Storage, cdp_idx: Uint128) -> StdR
     })
 }
 
-pub fn load_initial_cdp_state(storage: &dyn Storage) -> StdResult<InitialCDPState> {
-    KEY_INIT_CDP_STATE.load(storage)
+pub fn increase_state_collateral_diff(storage: &mut dyn Storage, diff: Uint128) -> StdResult<State> {
+    KEY_STATE.update(storage, |mut s: State| -> StdResult<State> {
+        s.collateral_amount_diff += diff;
+        Ok(s)
+    })
 }
 
-pub fn store_initial_cdp_state(storage: &mut dyn Storage, data: &InitialCDPState) -> StdResult<()> {
-    KEY_INIT_CDP_STATE.save(storage, data)
+pub fn increase_state_loan_diff(storage: &mut dyn Storage, diff: Uint128) -> StdResult<State> {
+    KEY_STATE.update(storage, |mut s: State| -> StdResult<State> {
+        s.loan_amount_diff += diff;
+        Ok(s)
+    })
 }
-
 
 pub fn may_load_position(storage: &dyn Storage, farmer_addr: &Addr, masset_token: &Addr) -> StdResult<Option<Position>> {
     KEY_POSITIONS.may_load(storage, (farmer_addr, masset_token))

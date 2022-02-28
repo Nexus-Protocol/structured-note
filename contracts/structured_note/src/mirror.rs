@@ -6,7 +6,7 @@ use terraswap::asset::{Asset, AssetInfo};
 use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorCollateralOracleQueryMsg, MirrorCollateralPriceResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg, MirrorOracleQueryMsg, MirrorPriceResponse};
 
 use crate::{concat, SubmsgIds};
-use crate::state::{Config, increment_iteration_index, load_config, load_leverage_info, load_state, State};
+use crate::state::{Config, increase_state_collateral_diff, increment_iteration_index, load_config, load_leverage_info, load_state, State};
 use crate::utils::decimal_division;
 
 pub fn query_mirror_mint_config(deps: Deps, mirror_mint_contract: String) -> StdResult<MirrorMintConfigResponse> {
@@ -97,7 +97,7 @@ pub fn get_asset_price_in_collateral_asset(deps: Deps, mirror_mint_config: &Mirr
 
 pub fn open_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResult<Response> {
     let config = load_config(deps.storage)?;
-    let state = load_state(deps.storage)?;
+    let state = increase_state_collateral_diff(deps.storage, received_aterra_amount)?;
 
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(

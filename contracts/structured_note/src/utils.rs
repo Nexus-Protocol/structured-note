@@ -1,4 +1,4 @@
-use cosmwasm_std::{Decimal, Event, StdError, StdResult, Uint128};
+use cosmwasm_std::{Decimal, Event, Fraction, StdError, StdResult, Uint128};
 
 // Math
 const DECIMAL_FRACTIONAL: Uint128 = Uint128::new(1_000_000_000u128);
@@ -13,6 +13,10 @@ pub fn decimal_division(num: Decimal, denom: Decimal) -> Decimal {
 
 pub fn reverse_decimal(decimal: Decimal) -> Decimal {
     Decimal::from_ratio(DECIMAL_FRACTIONAL, decimal * DECIMAL_FRACTIONAL)
+}
+
+pub fn decimal_to_uint128(decimal: Decimal) -> Uint128 {
+    decimal.numerator(
 }
 
 //Response parsing
