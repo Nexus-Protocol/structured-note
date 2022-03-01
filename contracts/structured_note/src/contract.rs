@@ -4,12 +4,12 @@ use std::str::FromStr;
 use cosmwasm_bignumber::Uint256;
 use cosmwasm_std::{Binary, ContractResult, Decimal, Decimal256, Deps, DepsMut, entry_point, Env, Fraction, MessageInfo, Reply, Response, StdError, StdResult, SubMsgExecutionResponse, to_binary, Uint128};
 
-use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, LeverageInfo, QueryMsg};
+use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
 use crate::anchor::redeem_stable;
-use crate::commands::{deposit, deposit_stable, deposit_stable_on_reply, open_position, store_position_and_exit, validate_masset, withdraw};
+use crate::commands::{close, deposit, deposit_stable_on_reply, store_position_and_exit, validate_masset, withdraw};
 use crate::mirror::{burn_asset, deposit_to_cdp, get_asset_price_in_collateral_asset, mint_asset, open_cdp, query_cdp, query_masset_config, query_mirror_mint_config, withdraw_collateral};
-use crate::state::{increase_state_collateral_diff, insert_state_cdp_idx, load_config, load_leverage_info, load_position, load_state, may_load_position, State, store_leverage_info};
+use crate::state::{increase_state_collateral_diff, increase_state_loan_diff, insert_state_cdp_idx, load_config, load_position, load_state, may_load_position, State};
 use crate::SubmsgIds;
 use crate::terraswap::{buy_asset, sell_asset};
 use crate::utils::{decimal_division, decimal_multiplication, get_amount_from_response_asset_as_string_attr, get_amount_from_response_raw_attr, reverse_decimal};
@@ -30,21 +30,15 @@ pub fn instantiate(
 #[entry_point]
 pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     match msg {
-        ExecuteMsg::OpenPosition {
-            masset_token,
-            leverage,
-            initial_collateral_ratio,
-        } => {
-            deposit(deps, info, masset_token, Some(leverage), initial_collateral_ratio)
-        },
         ExecuteMsg::Deposit {
             masset_token,
-            aim_collateral_ratio
+            leverage,
+            aim_collateral_ratio,
         } => {
-            deposit(deps, info, masset_token, None, aim_collateral_ratio)
+            deposit(deps, info, masset_token, leverage, aim_collateral_ratio)
         },
         ExecuteMsg::ClosePosition { masset_token } => {
-            withdraw(deps, info, masset_token)
+            close(deps, info, masset_token)
         }
         ExecuteMsg::Withdraw { masset_token, amount, aim_collateral_ratio } => {
             withdraw(deps, info, masset_token, amount)
@@ -83,11 +77,12 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
             } else {
                 (state.collateral_amount_diff, state.loan_amount_diff)
             };
-            //TODO: convert decimal_to_uint128
-            //aim_collateral_ratio = collateral_value / (aim_loan_value) = collateral_ratio / (aim_loan_amount * asset_price_in_collateral_asset)
-            let num = Decimal::from_ratio(collateral_amount, Uint256::one());
-            let denom = decimal_multiplication(&state.aim_collateral_ratio, &state.asset_price_in_collateral_asset);
-            let aim_loan_amount: Uint128 = decimal_division(num, denom).into();
+            //aim_collateral_ratio = collateral_value / aim_loan_value = collateral_ratio / (aim_loan_amount * asset_price_in_collateral_asset)
+            // aim_loan_amount = collateral_amount/(aim_collateral_ratio * asset_price_in_collateral_asset)
+
+            let coef = decimal_multiplication(&state.aim_collateral_ratio, &state.asset_price_in_collateral_asset);
+
+            let aim_loan_amount = Uint128::from(collateral_amount.u128() * coef.denominator() / coef.numerator());
 
             if aim_loan_amount <= loan_amount {
                 // impossible case because to decrease loan_amount contract needs to burn some masset_tokens which are not considered to be in contract
@@ -99,7 +94,8 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
         SubmsgIds::SellAsset => {
             let minted_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events.clone(), "mint_amount".to_string())?)?;
             let cdp_idx = Uint128::from_str(&get_amount_from_response_raw_attr(events, "position_idx".to_string())?)?;
-            let state = insert_state_cdp_idx(deps.storage, cdp_idx)?;
+            insert_state_cdp_idx(deps.storage, cdp_idx)?;
+            let state = increase_state_loan_diff(deps.storage, minted_amount)?;
             sell_asset(env, &state, minted_amount)
         }
         SubmsgIds::DepositStableOnReply => {
@@ -133,6 +129,6 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&load_config(deps.storage)?),
-        QueryMsg::Position { .. } => {}
+        QueryMsg::Position { .. } => { unimplemented!() }
     }
 }

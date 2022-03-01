@@ -6,7 +6,7 @@ use terraswap::asset::{Asset, AssetInfo};
 use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorCollateralOracleQueryMsg, MirrorCollateralPriceResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg, MirrorOracleQueryMsg, MirrorPriceResponse};
 
 use crate::{concat, SubmsgIds};
-use crate::state::{Config, increase_state_collateral_diff, increment_iteration_index, load_config, load_leverage_info, load_state, State};
+use crate::state::{Config, increase_state_collateral_diff, increment_iteration_index, load_config, load_state, State};
 use crate::utils::decimal_division;
 
 pub fn query_mirror_mint_config(deps: Deps, mirror_mint_contract: String) -> StdResult<MirrorMintConfigResponse> {
@@ -92,7 +92,7 @@ pub fn get_asset_price_in_collateral_asset(deps: Deps, mirror_mint_config: &Mirr
     let oracle_addr = deps.api.addr_validate(&mirror_mint_config.oracle)?;
     let asset_price = query_asset_price(deps, &oracle_addr, masset_token, config.stable_denom.clone())?;
 
-    Ok(decimal_division(collateral_price, asset_price))
+    Ok(decimal_division(collateral_price, asset_price)?)
 }
 
 pub fn open_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResult<Response> {
@@ -218,7 +218,6 @@ pub fn burn_asset(deps: DepsMut, return_amount: Uint128) -> StdResult<Response> 
     let config = load_config(deps.storage)?;
     //Increment iteration index here 'cause exit is on this step
     let state = increment_iteration_index(deps.storage)?;
-    let leverage_info = load_leverage_info(deps.storage)?;
 
     let cdp_idx = if let Some(i) = state.cdp_idx {
         i
@@ -227,7 +226,7 @@ pub fn burn_asset(deps: DepsMut, return_amount: Uint128) -> StdResult<Response> 
     };
 
     let submsg_id =
-        if state.cur_iteration_index > leverage_info.leverage_iter_amount {
+        if state.cur_iteration_index > state.leverage {
             SubmsgIds::Exit.id()
         } else {
             SubmsgIds::WithdrawCollateralOnReply.id()

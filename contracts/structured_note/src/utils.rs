@@ -7,16 +7,16 @@ pub fn decimal_multiplication(arg_1: &Decimal, arg_2: &Decimal) -> Decimal {
     Decimal::from_ratio(DECIMAL_FRACTIONAL * (*arg_1) * (*arg_2), DECIMAL_FRACTIONAL)
 }
 
-pub fn decimal_division(num: Decimal, denom: Decimal) -> Decimal {
-    Decimal::from_ratio(DECIMAL_FRACTIONAL * num, DECIMAL_FRACTIONAL * denom)
+pub fn decimal_division(num: Decimal, denom: Decimal) -> StdResult<Decimal> {
+    if denom * DECIMAL_FRACTIONAL <= Uint128::zero() {
+        return Err(StdError::generic_err("Division by zero"));
+    }
+
+    Ok(Decimal::from_ratio(DECIMAL_FRACTIONAL * num, DECIMAL_FRACTIONAL * denom))
 }
 
 pub fn reverse_decimal(decimal: Decimal) -> Decimal {
     Decimal::from_ratio(DECIMAL_FRACTIONAL, decimal * DECIMAL_FRACTIONAL)
-}
-
-pub fn decimal_to_uint128(decimal: Decimal) -> Uint128 {
-    decimal.numerator(
 }
 
 //Response parsing
