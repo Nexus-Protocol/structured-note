@@ -52,12 +52,12 @@ pub fn sell_asset(env: Env, state: &State, minted_amount: Uint128) -> StdResult<
         ]))
 }
 
-pub fn buy_asset(deps: Deps, env: Env, stable_amount: Uint128) -> StdResult<Response> {
+pub fn buy_asset(config: Config, state: State, contract_addr: String, stable_amount: Uint128) -> StdResult<Response> {
     let config = load_config(deps.storage)?;
     let state = load_state(deps.storage)?;
 
     let offer_asset = Coin {
-        denom: config.stable_denom,
+        denom: config.stable_denom.clone(),
         amount: stable_amount,
     };
     Ok(Response::new()
@@ -65,8 +65,8 @@ pub fn buy_asset(deps: Deps, env: Env, stable_amount: Uint128) -> StdResult<Resp
             contract_addr: state.pair_addr.to_string(),
             msg: to_binary(&Swap {
                 offer_asset: Asset {
-                    info: AssetInfo::Token {
-                        contract_addr: state.masset_token.to_string(),
+                    info: AssetInfo::NativeToken {
+                        denom: config.stable_denom,
                     },
                     amount: stable_amount,
                 },

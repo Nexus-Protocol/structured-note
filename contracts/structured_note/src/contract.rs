@@ -7,9 +7,9 @@ use cosmwasm_std::{Binary, ContractResult, Decimal, Decimal256, Deps, DepsMut, e
 use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
 use crate::anchor::redeem_stable;
-use crate::commands::{close, deposit, deposit_stable_on_reply, store_position_and_exit, validate_masset, withdraw};
+use crate::commands::{close, close_on_reply, deposit, deposit_stable_on_reply, store_position_and_exit, validate_masset, withdraw};
 use crate::mirror::{burn_asset, deposit_to_cdp, get_asset_price_in_collateral_asset, mint_asset, open_cdp, query_cdp, query_masset_config, query_mirror_mint_config, withdraw_collateral};
-use crate::state::{increase_state_collateral_diff, increase_state_loan_diff, insert_state_cdp_idx, load_config, load_position, load_state, may_load_position, State};
+use crate::state::{increase_state_collateral_diff, increase_state_loan_diff, increment_iteration_index, insert_state_cdp_idx, load_config, load_position, load_state, may_load_position, State};
 use crate::SubmsgIds;
 use crate::terraswap::{buy_asset, sell_asset};
 use crate::utils::{decimal_division, decimal_multiplication, get_amount_from_response_asset_as_string_attr, get_amount_from_response_raw_attr, reverse_decimal};
@@ -37,6 +37,7 @@ pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> 
         } => {
             deposit(deps, info, masset_token, leverage, aim_collateral_ratio)
         },
+        ExecuteMsg::PlaneDeposit { masset_token } => {},
         ExecuteMsg::ClosePosition { masset_token } => {
             close(deps, info, masset_token)
         }
@@ -60,13 +61,14 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
             open_cdp(deps, received_aterra_amount)
         }
         SubmsgIds::DepositToCDP => {
-            let received_farmer_amount = Uint128::from_str(&get_amount_from_response_raw_attr(events, "mint_amount".to_string())?)?;
-            deposit_to_cdp(deps, received_farmer_amount)
+            let received_aterra_amount = Uint128::from_str(&get_amount_from_response_raw_attr(events, "mint_amount".to_string())?)?;
+            deposit_to_cdp(deps, received_aterra_amount)
         }
         SubmsgIds::MintAsset => {
             let deposited_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events.clone(), "deposit_amount".to_string())?)?;
             let cdp_idx = Uint128::from_str(&get_amount_from_response_raw_attr(events, "position_idx".to_string())?)?;
 
+            //TODO: why here? It's impossible cdp_idx is none here
             insert_state_cdp_idx(deps.storage, cdp_idx)?;
             let state = increase_state_collateral_diff(deps.storage, deposited_amount)?;
 
@@ -79,14 +81,12 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
             };
             //aim_collateral_ratio = collateral_value / aim_loan_value = collateral_ratio / (aim_loan_amount * asset_price_in_collateral_asset)
             // aim_loan_amount = collateral_amount/(aim_collateral_ratio * asset_price_in_collateral_asset)
-
             let coef = decimal_multiplication(&state.aim_collateral_ratio, &state.asset_price_in_collateral_asset);
-
             let aim_loan_amount = Uint128::from(collateral_amount.u128() * coef.denominator() / coef.numerator());
 
             if aim_loan_amount <= loan_amount {
-                // impossible case because to decrease loan_amount contract needs to burn some masset_tokens which are not considered to be in contract
-                return Err(StdError::generic_err("Aim loan amount is less of equals to actual loan amount. Deposit doesn't handle burning borrowed asset tokens."));
+                // impossible case because to decrease loan_amount contract needs to burn some masset_tokens which are not considered to be in the contract atm
+                return Err(StdError::generic_err("Aim loan amount is less or equals to actual loan amount. Deposit doesn't handle burning borrowed asset tokens."));
             };
             let mint_amount = aim_loan_amount - loan_amount;
             mint_asset(config, &state, mint_amount)
@@ -94,33 +94,33 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
         SubmsgIds::SellAsset => {
             let minted_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events.clone(), "mint_amount".to_string())?)?;
             let cdp_idx = Uint128::from_str(&get_amount_from_response_raw_attr(events, "position_idx".to_string())?)?;
+            //if the prev step is OpenCDP need to store just opened cdp
             insert_state_cdp_idx(deps.storage, cdp_idx)?;
             let state = increase_state_loan_diff(deps.storage, minted_amount)?;
             sell_asset(env, &state, minted_amount)
         }
         SubmsgIds::DepositStableOnReply => {
             let received_stable = Uint256::from_str(&get_amount_from_response_raw_attr(events, "return_amount".to_string())?)?;
-            let state = load_state(deps.storage)?;
-            deposit_stable_on_reply(deps, state, received_stable)
+            deposit_stable_on_reply(deps, received_stable)
         }
-        SubmsgIds::Exit => {
+        SubmsgIds::ExitOnDeposit => {
             store_position_and_exit(deps)
         }
         SubmsgIds::RedeemStable => {
             let received_aterra_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events, "withdraw_amount".to_string())?)?;
-            redeem_stable(deps.as_ref(), received_aterra_amount)
+            redeem_stable(load_config(deps.storage)?, received_aterra_amount)
         }
         SubmsgIds::BuyAsset => {
             let received_stable_amount = Uint128::from_str(&get_amount_from_response_raw_attr(events, "redeem_amount".to_string())?)?;
-            buy_asset(deps.as_ref(), env, received_stable_amount)
+            buy_asset(load_config(deps.storage)?, load_state(deps.storage)?, env.contract.address.to_string(), received_stable_amount)
         }
         SubmsgIds::BurnAsset => {
             let return_amount = Uint128::from_str(&get_amount_from_response_raw_attr(events, "return_amount".to_string())?)?;
-            burn_asset(deps, return_amount)
+            increase_state_loan_diff(deps.storage, return_amount)?;
+            burn_asset(load_config(deps.storage)?, increment_iteration_index(deps.storage)?, return_amount)
         }
-        SubmsgIds::WithdrawCollateralOnReply => {
-            //TODO: figure out amount to withdraw from collateral on reply
-            // withdraw_collateral();
+        SubmsgIds::CloseOnReply => {
+            close_on_reply();
         }
     }
 }

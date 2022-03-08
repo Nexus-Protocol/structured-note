@@ -8,14 +8,13 @@ pub struct InstantiateMsg {}
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
-    OpenPosition {
-        masset_token: String,
-        leverage: u8,
-        initial_collateral_ratio: Decimal,
-    },
     Deposit {
         masset_token: String,
+        leverage: Option<u8>,
         aim_collateral_ratio: Decimal,
+    },
+    PlaneDeposit {
+        masset_token: String,
     },
     ClosePosition {
         masset_token: String,

@@ -33,8 +33,7 @@ pub fn deposit_stable(config: Config, open_cdp: bool, deposit_amount: Uint256) -
         ]))
 }
 
-pub fn redeem_stable(deps: Deps, amount: Uint128) -> StdResult<Response> {
-    let config = load_config(deps.storage)?;
+pub fn redeem_stable(config: Config, amount: Uint128) -> StdResult<Response> {
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
             CosmosMsg::Wasm(WasmMsg::Execute {

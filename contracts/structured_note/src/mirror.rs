@@ -1,3 +1,6 @@
+use std::borrow::BorrowMut;
+use std::str::FromStr;
+
 use cosmwasm_std::{Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut, QueryRequest, Response, StdError, StdResult, SubMsg, to_binary, Uint128, WasmMsg, WasmQuery};
 use cosmwasm_storage::to_length_prefixed;
 use cw20::Cw20ExecuteMsg;
@@ -6,7 +9,7 @@ use terraswap::asset::{Asset, AssetInfo};
 use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorCollateralOracleQueryMsg, MirrorCollateralPriceResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg, MirrorOracleQueryMsg, MirrorPriceResponse};
 
 use crate::{concat, SubmsgIds};
-use crate::state::{Config, increase_state_collateral_diff, increment_iteration_index, load_config, load_state, State};
+use crate::state::{Config, increase_state_collateral_diff, increment_iteration_index, load_config, load_position, load_state, State};
 use crate::utils::decimal_division;
 
 pub fn query_mirror_mint_config(deps: Deps, mirror_mint_contract: String) -> StdResult<MirrorMintConfigResponse> {
@@ -139,7 +142,7 @@ pub fn deposit_to_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResu
 
     let submsg_id =
         if state.cur_iteration_index > state.leverage {
-            SubmsgIds::Exit.id()
+            SubmsgIds::ExitOnDeposit.id()
         } else {
             SubmsgIds::MintAsset.id()
         };
@@ -194,31 +197,27 @@ pub fn mint_asset(config: Config, state: &State, amount_to_mint: Uint128) -> Std
         ]))
 }
 
-pub fn withdraw_collateral(config: &Config, cdp_idx: Uint128, amount_to_withdraw: Uint128) -> StdResult<Response> {
+pub fn withdraw_collateral(config: Config, cdp_idx: Uint128, amount_to_withdraw: Uint128) -> StdResult<Response> {
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.mirror_mint_contract.to_string(),
             msg: to_binary(&MirrorMintExecuteMsg::Withdraw {
-                position_idx: cdp_idx.clone(),
+                position_idx: cdp_idx,
                 collateral: Some(Asset {
                     info: AssetInfo::Token { contract_addr: config.aterra_addr.to_string() },
-                    amount: amount_to_withdraw.clone(),
+                    amount: amount_to_withdraw,
                 }),
             })?,
             funds: vec![],
         }), SubmsgIds::RedeemStable.id(),
         )).add_attributes(vec![
         ("action", "withdraw_collateral"),
-        ("cdp_idx", &cdp_idx.to_string()),
+        ("cdp_idx", &position.cdp_idx.to_string()),
         ("amount", &amount_to_withdraw.to_string()),
     ]))
 }
 
-pub fn burn_asset(deps: DepsMut, return_amount: Uint128) -> StdResult<Response> {
-    let config = load_config(deps.storage)?;
-    //Increment iteration index here 'cause exit is on this step
-    let state = increment_iteration_index(deps.storage)?;
-
+pub fn burn_asset(config: Config, state: State, return_amount: Uint128) -> StdResult<Response> {
     let cdp_idx = if let Some(i) = state.cdp_idx {
         i
     } else {
@@ -227,9 +226,9 @@ pub fn burn_asset(deps: DepsMut, return_amount: Uint128) -> StdResult<Response> 
 
     let submsg_id =
         if state.cur_iteration_index > state.leverage {
-            SubmsgIds::Exit.id()
+            SubmsgIds::ExitOnClosure.id()
         } else {
-            SubmsgIds::WithdrawCollateralOnReply.id()
+            SubmsgIds::CloseOnReply.id()
         };
 
     Ok(Response::new()
