@@ -9,10 +9,10 @@ use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, Query
 use crate::anchor::redeem_stable;
 use crate::commands::{close, close_on_reply, deposit, deposit_stable_on_reply, store_position_and_exit, validate_masset, withdraw};
 use crate::mirror::{burn_asset, deposit_to_cdp, get_asset_price_in_collateral_asset, mint_asset, open_cdp, query_cdp, query_masset_config, query_mirror_mint_config, withdraw_collateral};
-use crate::state::{increase_state_collateral_diff, increase_state_loan_diff, increment_iteration_index, insert_state_cdp_idx, load_config, load_position, load_state, may_load_position, State};
+use crate::state::{increase_position_collateral, increase_position_loan, increment_iteration_index, load_config, load_state, may_load_position, Position, save_position, State, update_cdp};
 use crate::SubmsgIds;
 use crate::terraswap::{buy_asset, sell_asset};
-use crate::utils::{decimal_division, decimal_multiplication, get_amount_from_response_asset_as_string_attr, get_amount_from_response_raw_attr, reverse_decimal};
+use crate::utils::{decimal_division, decimal_multiplication, get_action_name, get_amount_from_response_asset_as_string_attr, get_amount_from_response_raw_attr, reverse_decimal};
 
 #[entry_point]
 pub fn instantiate(
@@ -58,26 +58,23 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
     match submessage_enum {
         SubmsgIds::OpenCDP => {
             let received_aterra_amount = Uint128::from_str(&get_amount_from_response_raw_attr(events, "mint_amount".to_string())?)?;
-            open_cdp(deps, received_aterra_amount)
+            open_cdp(load_config(deps.storage)?, load_state(deps.storage)?, received_aterra_amount)
         }
         SubmsgIds::DepositToCDP => {
             let received_aterra_amount = Uint128::from_str(&get_amount_from_response_raw_attr(events, "mint_amount".to_string())?)?;
             deposit_to_cdp(deps, received_aterra_amount)
         }
         SubmsgIds::MintAsset => {
-            let deposited_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events.clone(), "deposit_amount".to_string())?)?;
-            let cdp_idx = Uint128::from_str(&get_amount_from_response_raw_attr(events, "position_idx".to_string())?)?;
-
-            //TODO: why here? It's impossible cdp_idx is none here
-            insert_state_cdp_idx(deps.storage, cdp_idx)?;
-            let state = increase_state_collateral_diff(deps.storage, deposited_amount)?;
-
             let config = load_config(deps.storage)?;
+            let state = load_state(deps.storage)?;
 
-            let (collateral_amount, loan_amount) = if let Some(position) = may_load_position(deps.storage, &state.farmer_addr, &state.masset_token)? {
-                (position.total_collateral_amount + state.collateral_amount_diff, position.total_loan_amount + state.loan_amount_diff)
+            let (cdp_idx, collateral_amount, loan_amount) = if let Some(position) = may_load_position(deps.storage, &state.farmer_addr, &state.masset_token)? {
+                (position.cdp_idx, position.collateral_amount, position.loan_amount)
             } else {
-                (state.collateral_amount_diff, state.loan_amount_diff)
+                return Err(StdError::generic_err(format!(
+                    "There isn't position: farmer_addr: {}, masset_token: {}.",
+                    &state.farmer_addr.to_string(),
+                    &state.masset_token.to_string())));
             };
             //aim_collateral_ratio = collateral_value / aim_loan_value = collateral_ratio / (aim_loan_amount * asset_price_in_collateral_asset)
             // aim_loan_amount = collateral_amount/(aim_collateral_ratio * asset_price_in_collateral_asset)
@@ -89,17 +86,30 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
                 return Err(StdError::generic_err("Aim loan amount is less or equals to actual loan amount. Deposit doesn't handle burning borrowed asset tokens."));
             };
             let mint_amount = aim_loan_amount - loan_amount;
-            mint_asset(config, &state, mint_amount)
+
+            increase_position_loan(deps.storage, &state.farmer_addr, &state.masset_token, mint_amount)?;
+            mint_asset(config, cdp_idx, state.masset_token.to_string(), mint_amount)
         }
         SubmsgIds::SellAsset => {
+            let state = load_state(deps.storage)?;
             let minted_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events.clone(), "mint_amount".to_string())?)?;
-            let cdp_idx = Uint128::from_str(&get_amount_from_response_raw_attr(events, "position_idx".to_string())?)?;
-            //if the prev step is OpenCDP need to store just opened cdp
-            insert_state_cdp_idx(deps.storage, cdp_idx)?;
-            let state = increase_state_loan_diff(deps.storage, minted_amount)?;
+            let collateral_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events.clone(), "collateral_amount".to_string())?)?;
+            if get_action_name(events.clone())? == "open_position".to_string() {
+                let cdp_idx = Uint128::from_str(&get_amount_from_response_raw_attr(events, "position_idx".to_string())?)?;
+                save_position(deps.storage, &Position {
+                    farmer_addr: state.farmer_addr.clone(),
+                    masset_token: state.masset_token.clone(),
+                    cdp_idx,
+                    leverage: state.leverage,
+                    loan_amount: minted_amount,
+                    collateral_amount,
+                    aim_collateral_ratio: state.aim_collateral_ratio,
+                })?;
+                update_cdp(deps.storage, cdp_idx, state.farmer_addr, state.masset_token)?;
+            }
             sell_asset(env, &state, minted_amount)
         }
-        SubmsgIds::DepositStableOnReply => {
+        SubmsgIds::DepositOnReply => {
             let received_stable = Uint256::from_str(&get_amount_from_response_raw_attr(events, "return_amount".to_string())?)?;
             deposit_stable_on_reply(deps, received_stable)
         }

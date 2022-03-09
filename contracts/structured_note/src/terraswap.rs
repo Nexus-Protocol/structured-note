@@ -43,7 +43,7 @@ pub fn sell_asset(env: Env, state: &State, minted_amount: Uint128) -> StdResult<
                 })?,
                 funds: vec![],
             }),
-            SubmsgIds::DepositStableOnReply.id(),
+            SubmsgIds::DepositOnReply.id(),
         ))
         .add_attributes(vec![
             ("action", "sell_asset"),
@@ -53,9 +53,6 @@ pub fn sell_asset(env: Env, state: &State, minted_amount: Uint128) -> StdResult<
 }
 
 pub fn buy_asset(config: Config, state: State, contract_addr: String, stable_amount: Uint128) -> StdResult<Response> {
-    let config = load_config(deps.storage)?;
-    let state = load_state(deps.storage)?;
-
     let offer_asset = Coin {
         denom: config.stable_denom.clone(),
         amount: stable_amount,
@@ -72,7 +69,7 @@ pub fn buy_asset(config: Config, state: State, contract_addr: String, stable_amo
                 },
                 belief_price: None,
                 max_spread: None,
-                to: Some(env.contract.address.to_string()),
+                to: Some(contract_addr),
             })?,
             funds: vec![offer_asset],
         }), SubmsgIds::BurnAsset.id()))

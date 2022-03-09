@@ -9,7 +9,7 @@ use terraswap::asset::{Asset, AssetInfo};
 use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorCollateralOracleQueryMsg, MirrorCollateralPriceResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg, MirrorOracleQueryMsg, MirrorPriceResponse};
 
 use crate::{concat, SubmsgIds};
-use crate::state::{Config, increase_state_collateral_diff, increment_iteration_index, load_config, load_position, load_state, State};
+use crate::state::{Config, increase_position_collateral, increment_iteration_index, load_config, load_state, may_load_position, State};
 use crate::utils::decimal_division;
 
 pub fn query_mirror_mint_config(deps: Deps, mirror_mint_contract: String) -> StdResult<MirrorMintConfigResponse> {
@@ -98,10 +98,7 @@ pub fn get_asset_price_in_collateral_asset(deps: Deps, mirror_mint_config: &Mirr
     Ok(decimal_division(collateral_price, asset_price)?)
 }
 
-pub fn open_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResult<Response> {
-    let config = load_config(deps.storage)?;
-    let state = increase_state_collateral_diff(deps.storage, received_aterra_amount)?;
-
+pub fn open_cdp(config: Config, state: State, received_aterra_amount: Uint128) -> StdResult<Response> {
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
             CosmosMsg::Wasm(WasmMsg::Execute {
@@ -134,18 +131,14 @@ pub fn deposit_to_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResu
     //Increment iteration index here 'cause exit is on this step
     let state = increment_iteration_index(deps.storage)?;
 
-    let cdp_idx = if let Some(i) = state.cdp_idx {
-        i
-    } else {
-        return Err(StdError::generic_err("cdp_idx has to be stored by now"));
-    };
-
     let submsg_id =
         if state.cur_iteration_index > state.leverage {
             SubmsgIds::ExitOnDeposit.id()
         } else {
             SubmsgIds::MintAsset.id()
         };
+
+    let position = increase_position_collateral(deps.storage, &state.farmer_addr, &state.masset_token, received_aterra_amount)?;
 
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
@@ -155,7 +148,7 @@ pub fn deposit_to_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResu
                     contract: config.mirror_mint_contract.to_string(),
                     amount: received_aterra_amount,
                     msg: to_binary(&MirrorMintCW20HookMsg::Deposit {
-                        position_idx: cdp_idx,
+                        position_idx: position.cdp_idx,
                     })?,
                 })?,
                 funds: vec![],
@@ -169,20 +162,14 @@ pub fn deposit_to_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResu
         ]))
 }
 
-pub fn mint_asset(config: Config, state: &State, amount_to_mint: Uint128) -> StdResult<Response> {
-    let cdp_idx = if let Some(i) = state.cdp_idx {
-        i
-    } else {
-        return Err(StdError::generic_err("cdp_idx has to be stored by now"));
-    };
-
+pub fn mint_asset(config: Config, cdp_idx: Uint128, masset_token: String, amount_to_mint: Uint128) -> StdResult<Response> {
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.mirror_mint_contract.to_string(),
             msg: to_binary(&MirrorMintExecuteMsg::Mint {
                 position_idx: cdp_idx,
                 asset: Asset {
-                    info: AssetInfo::Token { contract_addr: state.masset_token.to_string() },
+                    info: AssetInfo::Token { contract_addr: masset_token },
                     amount: amount_to_mint,
                 },
                 short_params: None,
@@ -192,7 +179,7 @@ pub fn mint_asset(config: Config, state: &State, amount_to_mint: Uint128) -> Std
         ))
         .add_attributes(vec![
             ("action", "mint_asset"),
-            ("masset_token", &state.masset_token.to_string()),
+            ("masset_token", &masset_token.to_string()),
             ("mint_amount", &amount_to_mint.to_string()),
         ]))
 }
@@ -212,7 +199,7 @@ pub fn withdraw_collateral(config: Config, cdp_idx: Uint128, amount_to_withdraw:
         }), SubmsgIds::RedeemStable.id(),
         )).add_attributes(vec![
         ("action", "withdraw_collateral"),
-        ("cdp_idx", &position.cdp_idx.to_string()),
+        ("cdp_idx", &cdp_idx.to_string()),
         ("amount", &amount_to_withdraw.to_string()),
     ]))
 }

@@ -1,5 +1,5 @@
 use cosmwasm_bignumber::Decimal256;
-use cosmwasm_std::{Addr, Decimal, Order, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, Decimal, Order, StdError, StdResult, Storage, Uint128};
 use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -33,7 +33,6 @@ pub struct CDP {
 //Store data for recursive deposit and withdraw
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
-    pub cdp_idx: Option<Uint128>,
     pub farmer_addr: Addr,
     pub masset_token: Addr,
     pub leverage: u8,
@@ -41,8 +40,6 @@ pub struct State {
     pub asset_price_in_collateral_asset: Decimal,
     pub pair_addr: Addr,
     pub aim_collateral_ratio: Decimal,
-    pub loan_amount_diff: Uint128,
-    pub collateral_amount_diff: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -51,8 +48,8 @@ pub struct Position {
     pub masset_token: Addr,
     pub cdp_idx: Uint128,
     pub leverage: u8,
-    pub total_loan_amount: Uint128,
-    pub total_collateral_amount: Uint128,
+    pub loan_amount: Uint128,
+    pub collateral_amount: Uint128,
     pub aim_collateral_ratio: Decimal,
 }
 
@@ -94,25 +91,25 @@ pub fn remove_cdp(storage: &mut dyn Storage, masset_token: &Addr) {
     KEY_CDPS.remove(storage, masset_token)
 }
 
-pub fn update_cdp(storage: &mut dyn Storage, state: &State) -> StdResult<CDP> {
+pub fn update_cdp(storage: &mut dyn Storage, cdp_idx: Uint128, farmer_addr: Addr, masset_token: Addr) -> StdResult<CDP> {
     let action = |cdp: Option<CDP>| -> StdResult<CDP> {
         match cdp {
             None => Ok(
                 CDP {
-                    idx: state.cdp_idx.unwrap(),
-                    masset_token: state.masset_token.clone(),
-                    farmers: vec![state.farmer_addr.clone()],
+                    idx: cdp_idx,
+                    masset_token,
+                    farmers: vec![farmer_addr],
                 }
             ),
             Some(mut cdp) => {
-                if !cdp.farmers.contains(&state.farmer_addr) {
-                    cdp.farmers.push(state.farmer_addr.clone());
+                if !cdp.farmers.contains(&farmer_addr) {
+                    cdp.farmers.push(farmer_addr);
                 }
                 Ok(cdp)
             }
         }
     };
-    KEY_CDPS.update(storage, &state.masset_token, action)
+    KEY_CDPS.update(storage, &masset_token, action)
 }
 
 pub fn load_state(storage: &dyn Storage) -> StdResult<State> {
@@ -130,63 +127,36 @@ pub fn increment_iteration_index(storage: &mut dyn Storage) -> StdResult<State> 
     })
 }
 
-pub fn insert_state_cdp_idx(storage: &mut dyn Storage, cdp_idx: Uint128) -> StdResult<State> {
-    KEY_STATE.update(storage, |mut s: State| -> StdResult<State> {
-        if (s.cdp_idx.is_none()) {
-            s.cdp_idx = Some(cdp_idx);
-        }
-        Ok(s)
-    })
-}
-
-pub fn increase_state_collateral_diff(storage: &mut dyn Storage, diff: Uint128) -> StdResult<State> {
-    KEY_STATE.update(storage, |mut s: State| -> StdResult<State> {
-        s.collateral_amount_diff += diff;
-        Ok(s)
-    })
-}
-
-pub fn increase_state_loan_diff(storage: &mut dyn Storage, diff: Uint128) -> StdResult<State> {
-    KEY_STATE.update(storage, |mut s: State| -> StdResult<State> {
-        s.loan_amount_diff += diff;
-        Ok(s)
-    })
-}
-
 pub fn may_load_position(storage: &dyn Storage, farmer_addr: &Addr, masset_token: &Addr) -> StdResult<Option<Position>> {
     KEY_POSITIONS.may_load(storage, (farmer_addr, masset_token))
 }
 
-pub fn load_position(storage: &dyn Storage, farmer_addr: &Addr, masset_token: &Addr) -> StdResult<Position> {
-    KEY_POSITIONS.load(storage, (farmer_addr, masset_token))
+pub fn increase_position_collateral(storage: &mut dyn Storage, farmer_addr: &Addr, masset_token: &Addr, diff: Uint128) -> StdResult<Position> {
+    KEY_POSITIONS.update(storage, (farmer_addr, masset_token), |mut p: Option<Position>| -> StdResult<Position> {
+        if let Some(mut p) = p {
+            p.collateral_amount += diff;
+            Ok(p)
+        } else {
+            Err(StdError::generic_err(format!(
+                "There isn't position: farmer_addr: {}, masset_token: {}.",
+                &farmer_addr.to_string(),
+                &masset_token.to_string())))
+        }
+    })
 }
 
-pub fn upsert_position(storage: &mut dyn Storage,
-                       state: &State,
-                       loan_diff: Uint128,
-                       collateral_diff: Uint128,
-) -> StdResult<Position> {
-    let action = |p: Option<Position>| -> StdResult<Position> {
-        match p {
-            None => Ok(
-                Position {
-                    farmer_addr: state.farmer_addr.clone(),
-                    masset_token: state.masset_token.clone(),
-                    cdp_idx: state.cdp_idx.unwrap(),
-                    leverage: state.leverage,
-                    aim_collateral_ratio: state.aim_collateral_ratio,
-                    total_loan_amount: loan_diff,
-                    total_collateral_amount: collateral_diff,
-                }
-            ),
-            Some(mut position) => {
-                position.total_collateral_amount += collateral_diff;
-                position.total_loan_amount += loan_diff;
-                Ok(position)
-            }
+pub fn increase_position_loan(storage: &mut dyn Storage, farmer_addr: &Addr, masset_token: &Addr, diff: Uint128) -> StdResult<Position> {
+    KEY_POSITIONS.update(storage, (farmer_addr, masset_token), |mut p: Option<Position>| -> StdResult<Position> {
+        if let Some(mut p) = p {
+            p.loan_amount += diff;
+            Ok(p)
+        } else {
+            Err(StdError::generic_err(format!(
+                "There isn't position: farmer_addr: {}, masset_token: {}.",
+                &farmer_addr.to_string(),
+                &masset_token.to_string())))
         }
-    };
-    KEY_POSITIONS.update(storage, (&state.farmer_addr, &state.masset_token), action)
+    })
 }
 
 pub fn load_all_positions(storage: &dyn Storage) -> StdResult<Vec<Position>> {
@@ -199,8 +169,8 @@ pub fn load_all_positions(storage: &dyn Storage) -> StdResult<Vec<Position>> {
                 masset_token: v.masset_token,
                 cdp_idx: v.cdp_idx,
                 leverage: v.leverage,
-                total_loan_amount: v.total_loan_amount,
-                total_collateral_amount: v.total_collateral_amount,
+                loan_amount: v.loan_amount,
+                collateral_amount: v.collateral_amount,
                 aim_collateral_ratio: v.aim_collateral_ratio,
             })
         })
@@ -218,8 +188,8 @@ pub fn load_positions_by_farmer_addr(storage: &dyn Storage, farmer_addr: &Addr) 
                 masset_token: v.masset_token,
                 cdp_idx: v.cdp_idx,
                 leverage: v.leverage,
-                total_loan_amount: v.total_loan_amount,
-                total_collateral_amount: v.total_collateral_amount,
+                loan_amount: v.loan_amount,
+                collateral_amount: v.collateral_amount,
                 aim_collateral_ratio: v.aim_collateral_ratio,
             })
         })
