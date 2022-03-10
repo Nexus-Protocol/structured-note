@@ -1,6 +1,3 @@
-use std::borrow::BorrowMut;
-use std::str::FromStr;
-
 use cosmwasm_std::{Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut, QueryRequest, Response, StdError, StdResult, SubMsg, to_binary, Uint128, WasmMsg, WasmQuery};
 use cosmwasm_storage::to_length_prefixed;
 use cw20::Cw20ExecuteMsg;
@@ -9,7 +6,7 @@ use terraswap::asset::{Asset, AssetInfo};
 use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorCollateralOracleQueryMsg, MirrorCollateralPriceResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg, MirrorOracleQueryMsg, MirrorPriceResponse};
 
 use crate::{concat, SubmsgIds};
-use crate::state::{Config, increase_position_collateral, increment_iteration_index, load_config, load_state, may_load_position, State};
+use crate::state::{Config, increase_position_collateral, increment_iteration_index, load_config, State};
 use crate::utils::decimal_division;
 
 pub fn query_mirror_mint_config(deps: Deps, mirror_mint_contract: String) -> StdResult<MirrorMintConfigResponse> {
@@ -133,7 +130,7 @@ pub fn deposit_to_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResu
 
     let submsg_id =
         if state.cur_iteration_index > state.leverage {
-            SubmsgIds::ExitOnDeposit.id()
+            SubmsgIds::Exit.id()
         } else {
             SubmsgIds::MintAsset.id()
         };
@@ -204,16 +201,11 @@ pub fn withdraw_collateral(config: Config, cdp_idx: Uint128, amount_to_withdraw:
     ]))
 }
 
-pub fn burn_asset(config: Config, state: State, return_amount: Uint128) -> StdResult<Response> {
-    let cdp_idx = if let Some(i) = state.cdp_idx {
-        i
-    } else {
-        return Err(StdError::generic_err("cdp_idx has to be stored by now"));
-    };
-
+pub fn burn_asset(config: Config, state: State, cdp_idx: Uint128, return_amount: Uint128) -> StdResult<Response> {
+    //Check iteration index for using this method on withdraw not only closure
     let submsg_id =
         if state.cur_iteration_index > state.leverage {
-            SubmsgIds::ExitOnClosure.id()
+            SubmsgIds::Exit.id()
         } else {
             SubmsgIds::CloseOnReply.id()
         };

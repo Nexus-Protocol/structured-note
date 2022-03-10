@@ -91,7 +91,7 @@ pub fn remove_cdp(storage: &mut dyn Storage, masset_token: &Addr) {
     KEY_CDPS.remove(storage, masset_token)
 }
 
-pub fn update_cdp(storage: &mut dyn Storage, cdp_idx: Uint128, farmer_addr: Addr, masset_token: Addr) -> StdResult<CDP> {
+pub fn add_farmer_to_cdp(storage: &mut dyn Storage, cdp_idx: Uint128, farmer_addr: Addr, masset_token: Addr) -> StdResult<CDP> {
     let action = |cdp: Option<CDP>| -> StdResult<CDP> {
         match cdp {
             None => Ok(
@@ -105,6 +105,20 @@ pub fn update_cdp(storage: &mut dyn Storage, cdp_idx: Uint128, farmer_addr: Addr
                 if !cdp.farmers.contains(&farmer_addr) {
                     cdp.farmers.push(farmer_addr);
                 }
+                Ok(cdp)
+            }
+        }
+    };
+    KEY_CDPS.update(storage, &masset_token, action)
+}
+
+pub fn remove_farmer_from_cdp(storage: &mut dyn Storage, farmer_addr: &Addr, masset_token: &Addr) -> StdResult<CDP> {
+    let action = |cdp: Option<CDP>| -> StdResult<CDP> {
+        match cdp {
+            // Impossible, but need to sure that never come here
+            None => Err(StdError::generic_err("Impossible case: no position on closure")),
+            Some(mut cdp) => {
+                cdp.farmers.retain(|x| x != farmer_addr);
                 Ok(cdp)
             }
         }
@@ -145,10 +159,38 @@ pub fn increase_position_collateral(storage: &mut dyn Storage, farmer_addr: &Add
     })
 }
 
+pub fn decrease_position_collateral(storage: &mut dyn Storage, farmer_addr: &Addr, masset_token: &Addr, diff: Uint128) -> StdResult<Position> {
+    KEY_POSITIONS.update(storage, (farmer_addr, masset_token), |mut p: Option<Position>| -> StdResult<Position> {
+        if let Some(mut p) = p {
+            p.collateral_amount -= diff;
+            Ok(p)
+        } else {
+            Err(StdError::generic_err(format!(
+                "There isn't position: farmer_addr: {}, masset_token: {}.",
+                &farmer_addr.to_string(),
+                &masset_token.to_string())))
+        }
+    })
+}
+
 pub fn increase_position_loan(storage: &mut dyn Storage, farmer_addr: &Addr, masset_token: &Addr, diff: Uint128) -> StdResult<Position> {
     KEY_POSITIONS.update(storage, (farmer_addr, masset_token), |mut p: Option<Position>| -> StdResult<Position> {
         if let Some(mut p) = p {
             p.loan_amount += diff;
+            Ok(p)
+        } else {
+            Err(StdError::generic_err(format!(
+                "There isn't position: farmer_addr: {}, masset_token: {}.",
+                &farmer_addr.to_string(),
+                &masset_token.to_string())))
+        }
+    })
+}
+
+pub fn decrease_position_loan(storage: &mut dyn Storage, farmer_addr: &Addr, masset_token: &Addr, diff: Uint128) -> StdResult<Position> {
+    KEY_POSITIONS.update(storage, (farmer_addr, masset_token), |mut p: Option<Position>| -> StdResult<Position> {
+        if let Some(mut p) = p {
+            p.loan_amount -= diff;
             Ok(p)
         } else {
             Err(StdError::generic_err(format!(

@@ -5,9 +5,7 @@ use terraswap::pair::Cw20HookMsg::Swap as Cw20HookSwap;
 use terraswap::pair::ExecuteMsg::Swap;
 use terraswap::querier::query_pair_info;
 
-use structured_note_package::mirror::MirrorMintConfigResponse;
-
-use crate::state::{Config, load_config, load_state, Position, State};
+use crate::state::{Config, load_config, State};
 use crate::SubmsgIds;
 
 pub fn query_pair_addr(deps: Deps, terraswap_factory_addr: &Addr, masset_token: &Addr) -> StdResult<String> {

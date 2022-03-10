@@ -1,10 +1,10 @@
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{Coin, CosmosMsg, Deps, DepsMut, Response, StdResult, SubMsg, to_binary, Uint128, WasmMsg};
+use cosmwasm_std::{Coin, CosmosMsg, Response, StdResult, SubMsg, to_binary, Uint128, WasmMsg};
 use cw20::Cw20ExecuteMsg;
 
 use structured_note_package::anchor::{AnchorMarketMsg, MirrorMintCW20HookMsg};
 
-use crate::state::{Config, load_config, State, store_state};
+use crate::state::Config;
 use crate::SubmsgIds;
 
 pub fn deposit_stable(config: Config, open_cdp: bool, deposit_amount: Uint256) -> StdResult<Response> {

@@ -1,4 +1,4 @@
-use cosmwasm_std::{Decimal, Event, Fraction, StdError, StdResult, Uint128};
+use cosmwasm_std::{Decimal, Event, StdError, StdResult, Uint128};
 
 // Math
 const DECIMAL_FRACTIONAL: Uint128 = Uint128::new(1_000_000_000u128);
@@ -19,6 +19,7 @@ pub fn reverse_decimal(decimal: Decimal) -> Decimal {
     Decimal::from_ratio(DECIMAL_FRACTIONAL, decimal * DECIMAL_FRACTIONAL)
 }
 
+//Paring
 pub fn get_action_name(events: Vec<Event>) -> StdResult<String> {
     events
         .into_iter()

@@ -2,17 +2,17 @@ use std::convert::TryFrom;
 use std::str::FromStr;
 
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{Binary, ContractResult, Decimal, Decimal256, Deps, DepsMut, entry_point, Env, Fraction, MessageInfo, Reply, Response, StdError, StdResult, SubMsgExecutionResponse, to_binary, Uint128};
+use cosmwasm_std::{Binary, ContractResult, Deps, DepsMut, entry_point, Env, Fraction, MessageInfo, Reply, Response, StdError, StdResult, to_binary, Uint128};
 
 use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
 use crate::anchor::redeem_stable;
-use crate::commands::{close, close_on_reply, deposit, deposit_stable_on_reply, store_position_and_exit, validate_masset, withdraw};
-use crate::mirror::{burn_asset, deposit_to_cdp, get_asset_price_in_collateral_asset, mint_asset, open_cdp, query_cdp, query_masset_config, query_mirror_mint_config, withdraw_collateral};
-use crate::state::{increase_position_collateral, increase_position_loan, increment_iteration_index, load_config, load_state, may_load_position, Position, save_position, State, update_cdp};
+use crate::commands::{close, close_on_reply, deposit, deposit_stable_on_reply, exit, withdraw};
+use crate::mirror::{burn_asset, deposit_to_cdp, mint_asset, open_cdp};
+use crate::state::{add_farmer_to_cdp, decrease_position_loan, increase_position_loan, increment_iteration_index, load_config, load_state, may_load_position, Position, save_position};
 use crate::SubmsgIds;
 use crate::terraswap::{buy_asset, sell_asset};
-use crate::utils::{decimal_division, decimal_multiplication, get_action_name, get_amount_from_response_asset_as_string_attr, get_amount_from_response_raw_attr, reverse_decimal};
+use crate::utils::{decimal_multiplication, get_action_name, get_amount_from_response_asset_as_string_attr, get_amount_from_response_raw_attr};
 
 #[entry_point]
 pub fn instantiate(
@@ -42,7 +42,7 @@ pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> 
             close(deps, info, masset_token)
         }
         ExecuteMsg::Withdraw { masset_token, amount, aim_collateral_ratio } => {
-            withdraw(deps, info, masset_token, amount)
+            withdraw(deps, info, masset_token, amount, aim_collateral_ratio)
         }
     }
 }
@@ -105,7 +105,7 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
                     collateral_amount,
                     aim_collateral_ratio: state.aim_collateral_ratio,
                 })?;
-                update_cdp(deps.storage, cdp_idx, state.farmer_addr, state.masset_token)?;
+                add_farmer_to_cdp(deps.storage, cdp_idx, state.farmer_addr, state.masset_token)?;
             }
             sell_asset(env, &state, minted_amount)
         }
@@ -113,8 +113,8 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
             let received_stable = Uint256::from_str(&get_amount_from_response_raw_attr(events, "return_amount".to_string())?)?;
             deposit_stable_on_reply(deps, received_stable)
         }
-        SubmsgIds::ExitOnDeposit => {
-            store_position_and_exit(deps)
+        SubmsgIds::Exit => {
+            exit()
         }
         SubmsgIds::RedeemStable => {
             let received_aterra_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events, "withdraw_amount".to_string())?)?;
@@ -126,11 +126,14 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
         }
         SubmsgIds::BurnAsset => {
             let return_amount = Uint128::from_str(&get_amount_from_response_raw_attr(events, "return_amount".to_string())?)?;
-            increase_state_loan_diff(deps.storage, return_amount)?;
-            burn_asset(load_config(deps.storage)?, increment_iteration_index(deps.storage)?, return_amount)
+            //increment iteration index for using this function on withdraw not only closure
+            let state = increment_iteration_index(deps.storage)?;
+            let position = decrease_position_loan(deps.storage, &state.farmer_addr, &state.masset_token, return_amount)?;
+            burn_asset(load_config(deps.storage)?, state, position.cdp_idx, return_amount)
         }
         SubmsgIds::CloseOnReply => {
-            close_on_reply();
+            let state = load_state(deps.storage)?;
+            close_on_reply(deps, state)
         }
     }
 }
