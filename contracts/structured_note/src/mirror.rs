@@ -201,7 +201,7 @@ pub fn withdraw_collateral(config: Config, cdp_idx: Uint128, amount_to_withdraw:
     ]))
 }
 
-pub fn burn_asset(config: Config, state: State, cdp_idx: Uint128, return_amount: Uint128) -> StdResult<Response> {
+pub fn burn_asset(config: Config, state: State, cdp_idx: Uint128, return_amount: Uint128, is_closure: bool) -> StdResult<Response> {
     //Check iteration index for using this method on withdraw not only closure
     let submsg_id =
         if state.cur_iteration_index > state.leverage {

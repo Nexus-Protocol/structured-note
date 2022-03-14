@@ -76,7 +76,7 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
                     &state.farmer_addr.to_string(),
                     &state.masset_token.to_string())));
             };
-            //aim_collateral_ratio = collateral_value / aim_loan_value = collateral_ratio / (aim_loan_amount * asset_price_in_collateral_asset)
+            //aim_collateral_ratio = collateral_value / aim_loan_value = collateral_amount / (aim_loan_amount * asset_price_in_collateral_asset)
             // aim_loan_amount = collateral_amount/(aim_collateral_ratio * asset_price_in_collateral_asset)
             let coef = decimal_multiplication(&state.aim_collateral_ratio, &state.asset_price_in_collateral_asset);
             let aim_loan_amount = Uint128::from(collateral_amount.u128() * coef.denominator() / coef.numerator());

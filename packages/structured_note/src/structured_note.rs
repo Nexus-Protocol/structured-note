@@ -16,6 +16,9 @@ pub enum ExecuteMsg {
     PlaneDeposit {
         masset_token: String,
     },
+    PlaneMint {
+        masset_token: String,
+    },
     ClosePosition {
         masset_token: String,
     },
@@ -23,6 +26,10 @@ pub enum ExecuteMsg {
         masset_token: String,
         amount: Uint128,
         aim_collateral_ratio: Decimal,
+    },
+    PlaneWithdraw {
+        masset_token: String,
+        amount: Uint128,
     },
 }
 

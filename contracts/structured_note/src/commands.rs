@@ -4,10 +4,10 @@ use cosmwasm_std::{Decimal, DepsMut, MessageInfo, Response, StdError, StdResult,
 use structured_note_package::mirror::MirrorAssetConfigResponse;
 
 use crate::anchor::deposit_stable as anc_deposit_stable;
-use crate::mirror::{get_asset_price_in_collateral_asset, query_cdp, query_masset_config, query_mirror_mint_config, withdraw_collateral};
-use crate::state::{add_farmer_to_cdp, decrease_position_collateral, load_config, may_load_cdp, may_load_position, Position, remove_farmer_from_cdp, remove_position, save_position, State, store_state};
+use crate::mirror::{get_asset_price_in_collateral_asset, query_masset_config, query_mirror_mint_config, withdraw_collateral};
+use crate::state::{add_farmer_to_cdp, decrease_position_collateral, load_config, may_load_cdp, may_load_position, Position, remove_farmer_from_cdp, remove_position, save_is_closure, save_position, State, store_state};
 use crate::terraswap::query_pair_addr;
-use crate::utils::decimal_multiplication;
+use crate::utils::{decimal_division, decimal_multiplication};
 
 pub fn deposit(
     deps: DepsMut,
@@ -30,7 +30,7 @@ pub fn deposit(
 
     let min_collateral_ratio = decimal_multiplication(&masset_config.min_collateral_ratio, &config.min_over_collateralization);
     if aim_collateral_ratio < min_collateral_ratio {
-        return Err(StdError::generic_err("Aim collateral ration too low"));
+        return Err(StdError::generic_err("Aim collateral ratio too low"));
     };
 
     validate_masset(&masset_config)?;
@@ -173,21 +173,25 @@ pub fn close_on_reply(deps: DepsMut, state: State) -> StdResult<Response> {
     }
 }
 
-pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, amount: Uint128, aim_collateral_ratio: Decimal) -> StdResult<Response> {
+pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_collateral_ratio: Decimal) -> StdResult<Response> {
     let masset_token = deps.api.addr_validate(&masset_token)?;
 
-    let masset_config = query_masset_config(deps.as_ref(), &masset_token)?;
-
-    let min_collateral_ratio = decimal_multiplication(&masset_config.min_collateral_ratio, &Decimal::percent(10));
-
-    let config = load_config(deps.storage)?;
-    let mirror_mint_config = query_mirror_mint_config(deps.as_ref(), config.mirror_mint_contract.to_string())?;
-
-    let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &deps.api.addr_validate(&mirror_mint_config.terraswap_factory)?, &masset_token)?)?;
-
-    let asset_price_in_collateral_asset = get_asset_price_in_collateral_asset(deps.as_ref(), &mirror_mint_config, &config, &masset_token)?;
-
     if let Some(position) = may_load_position(deps.storage, &info.sender, &masset_token)? {
+        let config = load_config(deps.storage)?;
+        let masset_config = query_masset_config(deps.as_ref(), &masset_token)?;
+        if aim_collateral_ratio < decimal_multiplication(&masset_config.min_collateral_ratio, &config.min_over_collateralization) {
+            return Err(StdError::generic_err("Aim collateral ratio too low"));
+        };
+
+        let mirror_mint_config = query_mirror_mint_config(deps.as_ref(), config.mirror_mint_contract.to_string())?;
+        let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &deps.api.addr_validate(&mirror_mint_config.terraswap_factory)?, &masset_token)?)?;
+        let asset_price_in_collateral_asset = get_asset_price_in_collateral_asset(deps.as_ref(), &mirror_mint_config, &config, &masset_token)?;
+
+        let current_collateral_ratio = Decimal::from_ratio(position.collateral_amount, position.loan_amount * asset_price_in_collateral_asset);
+        if aim_collateral_ratio > current_collateral_ratio {
+            return Err(StdError::generic_err("Aim collateral ratio higher than current. Impossible on withdraw"));
+        };
+
         store_state(deps.storage, &State {
             farmer_addr: position.farmer_addr,
             masset_token: position.masset_token,
@@ -195,10 +199,10 @@ pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, amount: 
             cur_iteration_index: 0,
             asset_price_in_collateral_asset: asset_price_in_collateral_asset.clone(),
             pair_addr,
-            aim_collateral_ratio: closure_collateral_ratio,
+            aim_collateral_ratio,
         })?;
 
-        let withdrawable_collateral = position.collateral_amount - position.loan_amount * asset_price_in_collateral_asset * closure_collateral_ratio;
+        let withdrawable_collateral = position.collateral_amount - position.loan_amount * asset_price_in_collateral_asset * aim_collateral_ratio;
 
         decrease_position_collateral(deps.storage, &info.sender, &masset_token, withdrawable_collateral)?;
 

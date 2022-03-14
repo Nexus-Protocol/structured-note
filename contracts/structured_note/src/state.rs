@@ -10,6 +10,7 @@ static KEY_STATE: Item<State> = Item::new("state");
 static KEY_CDPS: Map<&Addr, CDP> = Map::new("cdps");
 // Map<(position.farmer_addr, position.masset_token), Position>
 static KEY_POSITIONS: Map<(&Addr, &Addr), Position> = Map::new("positions");
+static KEY_IS_CLOSURE: Item<bool> = Item::new("is_closure");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
