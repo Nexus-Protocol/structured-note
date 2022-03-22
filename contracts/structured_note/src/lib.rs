@@ -20,8 +20,10 @@ pub enum SubmsgIds {
     Exit,
     //Withdraw
     RedeemStable,
+    ReturnStable,
     BuyAsset,
     BurnAsset,
+    WithdrawOnReply,
     CloseOnReply,
     ExitOnClosure,
 }
@@ -38,8 +40,10 @@ impl TryFrom<u64> for SubmsgIds {
             x if x == SubmsgIds::DepositOnReply.id() => Ok(SubmsgIds::DepositOnReply),
             x if x == SubmsgIds::Exit.id() => Ok(SubmsgIds::Exit),
             x if x == SubmsgIds::RedeemStable.id() => Ok(SubmsgIds::RedeemStable),
+            x if x == SubmsgIds::ReturnStable.id() => Ok(SubmsgIds::ReturnStable),
             x if x == SubmsgIds::BuyAsset.id() => Ok(SubmsgIds::BuyAsset),
             x if x == SubmsgIds::BurnAsset.id() => Ok(SubmsgIds::BurnAsset),
+            x if x == SubmsgIds::WithdrawOnReply.id() => Ok(SubmsgIds::WithdrawOnReply),
             x if x == SubmsgIds::CloseOnReply.id() => Ok(SubmsgIds::CloseOnReply),
             x if x == SubmsgIds::ExitOnClosure.id() => Ok(SubmsgIds::ExitOnClosure),
             unknown => Err(StdError::generic_err(format!(
@@ -60,10 +64,12 @@ impl SubmsgIds {
             SubmsgIds::DepositOnReply => 4,
             SubmsgIds::Exit => 5,
             SubmsgIds::RedeemStable => 6,
-            SubmsgIds::BuyAsset => 7,
-            SubmsgIds::BurnAsset => 8,
-            SubmsgIds::CloseOnReply => 9,
-            SubmsgIds::ExitOnClosure => 10,
+            SubmsgIds::ReturnStable => 7,
+            SubmsgIds::BuyAsset => 8,
+            SubmsgIds::BurnAsset => 9,
+            SubmsgIds::WithdrawOnReply => 10,
+            SubmsgIds::CloseOnReply => 11,
+            SubmsgIds::ExitOnClosure => 12,
         }
     }
 }

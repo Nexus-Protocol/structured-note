@@ -5,7 +5,7 @@ use terraswap::pair::Cw20HookMsg::Swap as Cw20HookSwap;
 use terraswap::pair::ExecuteMsg::Swap;
 use terraswap::querier::query_pair_info;
 
-use crate::state::{Config, load_config, State};
+use crate::state::{Config, DepositState, load_config};
 use crate::SubmsgIds;
 
 pub fn query_pair_addr(deps: Deps, terraswap_factory_addr: &Addr, masset_token: &Addr) -> StdResult<String> {
@@ -25,7 +25,7 @@ pub fn query_pair_addr(deps: Deps, terraswap_factory_addr: &Addr, masset_token: 
     Ok(pair_info.contract_addr)
 }
 
-pub fn sell_asset(env: Env, state: &State, minted_amount: Uint128) -> StdResult<Response> {
+pub fn sell_asset(env: Env, state: &DepositState, minted_amount: Uint128) -> StdResult<Response> {
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
             CosmosMsg::Wasm(WasmMsg::Execute {
@@ -50,10 +50,10 @@ pub fn sell_asset(env: Env, state: &State, minted_amount: Uint128) -> StdResult<
         ]))
 }
 
-pub fn buy_asset(config: Config, state: State, contract_addr: String, stable_amount: Uint128) -> StdResult<Response> {
+pub fn buy_asset(config: Config, state: DepositState, contract_addr: String, offer_amount: Uint128) -> StdResult<Response> {
     let offer_asset = Coin {
         denom: config.stable_denom.clone(),
-        amount: stable_amount,
+        amount: offer_amount,
     };
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(CosmosMsg::Wasm(WasmMsg::Execute {

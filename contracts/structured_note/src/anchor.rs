@@ -4,7 +4,7 @@ use cw20::Cw20ExecuteMsg;
 
 use structured_note_package::anchor::{AnchorMarketMsg, MirrorMintCW20HookMsg};
 
-use crate::state::Config;
+use crate::state::{Config, WithdrawType};
 use crate::SubmsgIds;
 
 pub fn deposit_stable(config: Config, open_cdp: bool, deposit_amount: Uint256) -> StdResult<Response> {
@@ -33,7 +33,12 @@ pub fn deposit_stable(config: Config, open_cdp: bool, deposit_amount: Uint256) -
         ]))
 }
 
-pub fn redeem_stable(config: Config, amount: Uint128) -> StdResult<Response> {
+pub fn redeem_stable(config: Config, amount: Uint128, withdraw_type: WithdrawType) -> StdResult<Response> {
+    let submsg_id = match withdraw_type {
+        WithdrawType::Raw => SubmsgIds::ReturnStable.id(),
+        _ => SubmsgIds::BuyAsset.id(),
+    };
+
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
             CosmosMsg::Wasm(WasmMsg::Execute {
@@ -45,7 +50,7 @@ pub fn redeem_stable(config: Config, amount: Uint128) -> StdResult<Response> {
                 })?,
                 funds: vec![],
             }),
-            SubmsgIds::BuyAsset.id(),
+            submsg_id,
         ))
         .add_attributes(vec![
             ("action", "redeem_stable"),

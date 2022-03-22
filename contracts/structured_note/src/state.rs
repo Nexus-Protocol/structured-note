@@ -4,8 +4,11 @@ use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use structured_note_package::structured_note::WithdrawType;
+
 static KEY_CONFIG: Item<Config> = Item::new("config");
-static KEY_STATE: Item<State> = Item::new("state");
+static KEY_DEPOSIT_STATE: Item<DepositState> = Item::new("deposit_state");
+static KEY_WITHDRAW_STATE: Item<WithdrawState> = Item::new("withdraw_state");
 // Map<cdp.masset_token, CDP>
 static KEY_CDPS: Map<&Addr, CDP> = Map::new("cdps");
 // Map<(position.farmer_addr, position.masset_token), Position>
@@ -33,7 +36,7 @@ pub struct CDP {
 
 //Store data for recursive deposit and withdraw
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct State {
+pub struct DepositState {
     pub farmer_addr: Addr,
     pub masset_token: Addr,
     pub leverage: u8,
@@ -41,6 +44,26 @@ pub struct State {
     pub asset_price_in_collateral_asset: Decimal,
     pub pair_addr: Addr,
     pub aim_collateral_ratio: Decimal,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct WithdrawState {
+    pub withdraw_type: WithdrawType,
+    pub farmer_addr: Addr,
+    pub masset_token: Addr,
+    pub aim_collateral_amount: Uint128,
+    pub aim_collateral_ratio: Decimal,
+    pub pair_addr: Addr,
+    pub repay_value: Uint128,
+}
+
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub enum WithdrawType {
+    Raw,
+    Simple,
+    Double,
+    Recursive,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -127,19 +150,27 @@ pub fn remove_farmer_from_cdp(storage: &mut dyn Storage, farmer_addr: &Addr, mas
     KEY_CDPS.update(storage, &masset_token, action)
 }
 
-pub fn load_state(storage: &dyn Storage) -> StdResult<State> {
-    KEY_STATE.load(storage)
+pub fn load_deposit_state(storage: &dyn Storage) -> StdResult<DepositState> {
+    KEY_DEPOSIT_STATE.load(storage)
 }
 
-pub fn store_state(storage: &mut dyn Storage, data: &State) -> StdResult<()> {
-    KEY_STATE.save(storage, data)
+pub fn store_deposit_state(storage: &mut dyn Storage, data: &DepositState) -> StdResult<()> {
+    KEY_DEPOSIT_STATE.save(storage, data)
 }
 
-pub fn increment_iteration_index(storage: &mut dyn Storage) -> StdResult<State> {
-    KEY_STATE.update(storage, |mut s: State| -> StdResult<State> {
+pub fn increment_iteration_index(storage: &mut dyn Storage) -> StdResult<DepositState> {
+    KEY_DEPOSIT_STATE.update(storage, |mut s: DepositState| -> StdResult<DepositState> {
         s.cur_iteration_index += 1;
         Ok(s)
     })
+}
+
+pub fn load_withdraw_state(storage: &dyn Storage) -> StdResult<WithdrawState> {
+    KEY_WITHDRAW_STATE.load(storage)
+}
+
+pub fn store_withdraw_state(storage: &mut dyn Storage, data: &WithdrawState) -> StdResult<()> {
+    KEY_WITHDRAW_STATE.save(storage, data)
 }
 
 pub fn may_load_position(storage: &dyn Storage, farmer_addr: &Addr, masset_token: &Addr) -> StdResult<Option<Position>> {

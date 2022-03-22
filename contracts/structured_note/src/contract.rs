@@ -1,4 +1,5 @@
 use std::convert::TryFrom;
+use std::os::macos::raw::stat;
 use std::str::FromStr;
 
 use cosmwasm_bignumber::Uint256;
@@ -7,9 +8,9 @@ use cosmwasm_std::{Binary, ContractResult, Deps, DepsMut, entry_point, Env, Frac
 use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
 use crate::anchor::redeem_stable;
-use crate::commands::{close, close_on_reply, deposit, deposit_stable_on_reply, exit, withdraw};
+use crate::commands::{close, close_on_reply, deposit, deposit_stable_on_reply, exit, return_stable, withdraw};
 use crate::mirror::{burn_asset, deposit_to_cdp, mint_asset, open_cdp};
-use crate::state::{add_farmer_to_cdp, decrease_position_loan, increase_position_loan, increment_iteration_index, load_config, load_state, may_load_position, Position, save_position};
+use crate::state::{add_farmer_to_cdp, decrease_position_loan, increase_position_loan, increment_iteration_index, load_config, load_deposit_state, load_withdraw_state, may_load_position, Position, save_position, WithdrawState, WithdrawType};
 use crate::SubmsgIds;
 use crate::terraswap::{buy_asset, sell_asset};
 use crate::utils::{decimal_multiplication, get_action_name, get_amount_from_response_asset_as_string_attr, get_amount_from_response_raw_attr};
@@ -58,7 +59,7 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
     match submessage_enum {
         SubmsgIds::OpenCDP => {
             let received_aterra_amount = Uint128::from_str(&get_amount_from_response_raw_attr(events, "mint_amount".to_string())?)?;
-            open_cdp(load_config(deps.storage)?, load_state(deps.storage)?, received_aterra_amount)
+            open_cdp(load_config(deps.storage)?, load_deposit_state(deps.storage)?, received_aterra_amount)
         }
         SubmsgIds::DepositToCDP => {
             let received_aterra_amount = Uint128::from_str(&get_amount_from_response_raw_attr(events, "mint_amount".to_string())?)?;
@@ -66,7 +67,7 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
         }
         SubmsgIds::MintAsset => {
             let config = load_config(deps.storage)?;
-            let state = load_state(deps.storage)?;
+            let state = load_deposit_state(deps.storage)?;
 
             let (cdp_idx, collateral_amount, loan_amount) = if let Some(position) = may_load_position(deps.storage, &state.farmer_addr, &state.masset_token)? {
                 (position.cdp_idx, position.collateral_amount, position.loan_amount)
@@ -91,7 +92,7 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
             mint_asset(config, cdp_idx, state.masset_token.to_string(), mint_amount)
         }
         SubmsgIds::SellAsset => {
-            let state = load_state(deps.storage)?;
+            let state = load_deposit_state(deps.storage)?;
             let minted_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events.clone(), "mint_amount".to_string())?)?;
             let collateral_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events.clone(), "collateral_amount".to_string())?)?;
             if get_action_name(events.clone())? == "open_position".to_string() {
@@ -118,22 +119,33 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
         }
         SubmsgIds::RedeemStable => {
             let received_aterra_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events, "withdraw_amount".to_string())?)?;
-            redeem_stable(load_config(deps.storage)?, received_aterra_amount)
+            let state = load_withdraw_state(deps.storage)?;
+            redeem_stable(load_config(deps.storage)?, received_aterra_amount, state.withdraw_type)
+        }
+        SubmsgIds::ReturnStable => {
+            return_stable(deps, env)?
         }
         SubmsgIds::BuyAsset => {
-            let received_stable_amount = Uint128::from_str(&get_amount_from_response_raw_attr(events, "redeem_amount".to_string())?)?;
-            buy_asset(load_config(deps.storage)?, load_state(deps.storage)?, env.contract.address.to_string(), received_stable_amount)
+            let state = load_withdraw_state(deps.storage)?;
+            let offer_amount = if state.withdraw_type == WithdrawType::Simple {
+                state.repay_value
+            } else {
+                Uint128::from_str(&get_amount_from_response_raw_attr(events, "redeem_amount".to_string())?)?;
+            };
+            buy_asset(load_config(deps.storage)?, load_deposit_state(deps.storage)?, env.contract.address.to_string(), offer_amount)
         }
         SubmsgIds::BurnAsset => {
             let return_amount = Uint128::from_str(&get_amount_from_response_raw_attr(events, "return_amount".to_string())?)?;
-            //increment iteration index for using this function on withdraw not only closure
-            let state = increment_iteration_index(deps.storage)?;
             let position = decrease_position_loan(deps.storage, &state.farmer_addr, &state.masset_token, return_amount)?;
-            burn_asset(load_config(deps.storage)?, state, position.cdp_idx, return_amount)
+            let state = load_withdraw_state(deps.storage)?;
+            burn_asset(load_config(deps.storage)?, load_withdraw_state(deps.storage)?, position.cdp_idx, return_amount)
         }
         SubmsgIds::CloseOnReply => {
-            let state = load_state(deps.storage)?;
+            let state = load_deposit_state(deps.storage)?;
             close_on_reply(deps, state)
+        }
+        SubmsgIds::WithdrawOnReply => {
+            withdraw_on_reply()
         }
     }
 }

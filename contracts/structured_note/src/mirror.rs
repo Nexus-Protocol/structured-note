@@ -6,7 +6,7 @@ use terraswap::asset::{Asset, AssetInfo};
 use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorCollateralOracleQueryMsg, MirrorCollateralPriceResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg, MirrorOracleQueryMsg, MirrorPriceResponse};
 
 use crate::{concat, SubmsgIds};
-use crate::state::{Config, increase_position_collateral, increment_iteration_index, load_config, State};
+use crate::state::{Config, DepositState, increase_position_collateral, increment_iteration_index, load_config, WithdrawState, WithdrawType};
 use crate::utils::decimal_division;
 
 pub fn query_mirror_mint_config(deps: Deps, mirror_mint_contract: String) -> StdResult<MirrorMintConfigResponse> {
@@ -85,17 +85,17 @@ pub fn query_asset_price(deps: Deps, oracle_addr: &Addr, asset_addr: &Addr, base
     Ok(res.rate)
 }
 
-pub fn get_asset_price_in_collateral_asset(deps: Deps, mirror_mint_config: &MirrorMintConfigResponse, config: &Config, masset_token: &Addr) -> StdResult<Decimal> {
+pub fn get_assets_prices(deps: Deps, mirror_mint_config: &MirrorMintConfigResponse, config: &Config, masset_token: &Addr) -> StdResult<(Decimal, Decimal)> {
     let collateral_oracle = deps.api.addr_validate(&mirror_mint_config.collateral_oracle)?;
     let collateral_price = query_collateral_price(deps, &collateral_oracle, &config.aterra_addr)?;
 
     let oracle_addr = deps.api.addr_validate(&mirror_mint_config.oracle)?;
     let asset_price = query_asset_price(deps, &oracle_addr, masset_token, config.stable_denom.clone())?;
 
-    Ok(decimal_division(collateral_price, asset_price)?)
+    Ok((collateral_price, asset_price))
 }
 
-pub fn open_cdp(config: Config, state: State, received_aterra_amount: Uint128) -> StdResult<Response> {
+pub fn open_cdp(config: Config, state: DepositState, received_aterra_amount: Uint128) -> StdResult<Response> {
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
             CosmosMsg::Wasm(WasmMsg::Execute {
@@ -201,14 +201,12 @@ pub fn withdraw_collateral(config: Config, cdp_idx: Uint128, amount_to_withdraw:
     ]))
 }
 
-pub fn burn_asset(config: Config, state: State, cdp_idx: Uint128, return_amount: Uint128, is_closure: bool) -> StdResult<Response> {
+pub fn burn_asset(config: Config, state: WithdrawState, cdp_idx: Uint128, return_amount: Uint128) -> StdResult<Response> {
     //Check iteration index for using this method on withdraw not only closure
-    let submsg_id =
-        if state.cur_iteration_index > state.leverage {
-            SubmsgIds::Exit.id()
-        } else {
-            SubmsgIds::CloseOnReply.id()
-        };
+    let submsg_id = match state.withdraw_type {
+        WithdrawType::Simple => SubmsgIds::ReturnStable.id(),
+        _ => SubmsgIds::WithdrawOnReply.id(),
+    };
 
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
