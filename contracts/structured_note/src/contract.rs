@@ -8,7 +8,7 @@ use cosmwasm_std::{Binary, ContractResult, Decimal, Deps, DepsMut, entry_point, 
 use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
 use crate::anchor::redeem_stable;
-use crate::commands::{calculate_withdraw_amount, close, close_on_reply, deposit, deposit_stable_on_reply, exit, is_aim_state, return_stable, withdraw};
+use crate::commands::{calculate_withdraw_amount, close, close_on_reply, deposit, deposit_stable_on_reply, exit, is_aim_state, raw_withdraw, return_stable, withdraw};
 use crate::mirror::{burn_asset, deposit_to_cdp, get_assets_prices, mint_asset, open_cdp, withdraw_collateral};
 use crate::state::{add_farmer_to_cdp, decrease_position_collateral, decrease_position_loan, increase_position_loan, increment_iteration_index, load_config, load_deposit_state, load_withdraw_state, may_load_position, Position, save_position, WithdrawState, WithdrawType};
 use crate::SubmsgIds;
@@ -38,14 +38,16 @@ pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> 
         } => {
             deposit(deps, info, masset_token, leverage, aim_collateral_ratio)
         }
-        ExecuteMsg::RawDeposit { masset_token, aim_collateral_amount } => {}
+        ExecuteMsg::RawDeposit { masset_token, aim_collateral } => {}
         ExecuteMsg::ClosePosition { masset_token } => {
             close(deps, info, masset_token)
         }
-        ExecuteMsg::Withdraw { masset_token, aim_collateral_amount, aim_collateral_ratio } => {
-            withdraw(deps, info, masset_token, amount, aim_collateral_ratio)
+        ExecuteMsg::Withdraw { masset_token, aim_collateral, aim_collateral_ratio } => {
+            withdraw(deps, info, masset_token, aim_collateral, aim_collateral_ratio)
         }
-        ExecuteMsg::RawWithdraw { masset_token, aim_collateral_amount } => {}
+        ExecuteMsg::RawWithdraw { masset_token, aim_collateral } => {
+            raw_withdraw(deps, info, masset_token, aim_collateral)
+        }
     }
 }
 

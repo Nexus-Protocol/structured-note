@@ -180,6 +180,10 @@ pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_coll
     let masset_token = deps.api.addr_validate(&masset_token)?;
 
     if let Some(position) = may_load_position(deps.storage, &info.sender, &masset_token)? {
+        if position.collateral < aim_collateral {
+            return Err(StdError::generic_err("Invalid msg: aim_collateral is greater then current!"));
+        };
+
         let config = load_config(deps.storage)?;
         let masset_config = query_masset_config(deps.as_ref(), &masset_token)?;
         let safe_collateral_ratio = decimal_multiplication(&masset_config.min_collateral_ratio, &config.min_over_collateralization);
@@ -190,10 +194,10 @@ pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_coll
         let mirror_mint_config = query_mirror_mint_config(deps.as_ref(), config.mirror_mint_contract.to_string())?;
         let (collateral_price, masset_price) = get_assets_prices(deps.as_ref(), &mirror_mint_config, &config, &masset_token)?;
         let masset_price_in_collateral_asset = decimal_division(collateral_price, masset_price)?;
-
-        let current_collateral_ratio = Decimal::from_ratio(position.collateral, loan_value_in_collateral_asset);
+        let loan_in_collateral_asset = position.loan * masset_price_in_collateral_asset;
+        let current_collateral_ratio = Decimal::from_ratio(position.collateral, loan_in_collateral_asset);
         if aim_collateral_ratio > current_collateral_ratio {
-            return Err(StdError::generic_err(format!("aim_collateral_ratio greater than curloan_value_in_collateral_assetrent_collateral_ratio: {}", &current_collateral_ratio)));
+            return Err(StdError::generic_err(format!("aim_collateral_ratio greater than current_collateral_ratio: {}", &current_collateral_ratio)));
         };
 
         let aim_loan_in_collateral_asset = Uint128::from(aim_collateral.u128() * aim_collateral_ratio.denominator() / aim_collateral_ratio.numerator());
@@ -214,6 +218,45 @@ pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_coll
         });
         let amount_to_withdraw = calculate_withdraw_amount(position.collateral, position.loan, aim_loan, masset_price_in_collateral_asset, safe_collateral_ratio);
         withdraw_collateral(config, position.cdp_idx, amount_to_withdraw)
+    } else {
+        Err(StdError::generic_err(format!(
+            "There isn't position: farmer_addr: {}, masset_token: {}.",
+            &info.sender.to_string(),
+            &masset_token.to_string())))
+    }
+}
+
+pub fn raw_withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_collateral: Uint128) -> StdResult<Response> {
+    let masset_token = deps.api.addr_validate(&masset_token)?;
+
+    if let Some(position) = may_load_position(deps.storage, &info.sender, &masset_token)? {
+        if position.collateral < aim_collateral {
+            return Err(StdError::generic_err("Invalid msg: aim_collateral is greater then current!"));
+        };
+
+        let config = load_config(deps.storage)?;
+        let masset_config = query_masset_config(deps.as_ref(), &masset_token)?;
+        let safe_collateral_ratio = decimal_multiplication(&masset_config.min_collateral_ratio, &config.min_over_collateralization);
+        let loan_in_collateral_asset = loan * masset_price_in_collateral_asset;
+        let min_safe_collateral = Uint128::from(loan_in_collateral_asset.u128() * safe_collateral_ratio.denominator() / safe_collateral_ratio.numerator());
+        if aim_collateral > min_safe_collateral {
+            return Err(StdError::generic_err("aim_collateral too low for raw withdraw"));
+        };
+
+        let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &deps.api.addr_validate(&mirror_mint_config.terraswap_factory)?, &masset_token)?)?;
+
+        store_withdraw_state(deps.storage, &WithdrawState {
+            is_raw: true,
+            farmer_addr: position.farmer_addr,
+            masset_token: position.masset_token,
+            aim_collateral,
+            aim_loan: Uint128::default(),
+            pair_addr,
+            collateral_price,
+            masset_price,
+            safe_collateral_ratio,
+        });
+        withdraw_collateral(config, position.cdp_idx, position.collateral - aim_collateral)
     } else {
         Err(StdError::generic_err(format!(
             "There isn't position: farmer_addr: {}, masset_token: {}.",

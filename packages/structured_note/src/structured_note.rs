@@ -15,16 +15,16 @@ pub enum ExecuteMsg {
     },
     RawDeposit {
         masset_token: String,
-        aim_collateral_amount: String,
+        aim_collateral: String,
     },
     Withdraw {
         masset_token: String,
-        aim_collateral_amount: Uint128,
+        aim_collateral: Uint128,
         aim_collateral_ratio: Decimal,
     },
     RawWithdraw {
         masset_token: String,
-        aim_collateral_amount: Uint128,
+        aim_collateral: Uint128,
     },
     ClosePosition {
         masset_token: String,
