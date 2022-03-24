@@ -19,13 +19,10 @@ pub enum SubmsgIds {
     DepositOnReply,
     Exit,
     //Withdraw
+    WithdrawCollateral,
     RedeemStable,
-    ReturnStable,
     BuyAsset,
     BurnAsset,
-    WithdrawOnReply,
-    CloseOnReply,
-    ExitOnClosure,
 }
 
 impl TryFrom<u64> for SubmsgIds {
@@ -39,13 +36,11 @@ impl TryFrom<u64> for SubmsgIds {
             x if x == SubmsgIds::SellAsset.id() => Ok(SubmsgIds::SellAsset),
             x if x == SubmsgIds::DepositOnReply.id() => Ok(SubmsgIds::DepositOnReply),
             x if x == SubmsgIds::Exit.id() => Ok(SubmsgIds::Exit),
+            x if x == SubmsgIds::WithdrawCollateral.id() => Ok(SubmsgIds::WithdrawCollateral),
             x if x == SubmsgIds::RedeemStable.id() => Ok(SubmsgIds::RedeemStable),
-            x if x == SubmsgIds::ReturnStable.id() => Ok(SubmsgIds::ReturnStable),
             x if x == SubmsgIds::BuyAsset.id() => Ok(SubmsgIds::BuyAsset),
             x if x == SubmsgIds::BurnAsset.id() => Ok(SubmsgIds::BurnAsset),
-            x if x == SubmsgIds::WithdrawOnReply.id() => Ok(SubmsgIds::WithdrawOnReply),
-            x if x == SubmsgIds::CloseOnReply.id() => Ok(SubmsgIds::CloseOnReply),
-            x if x == SubmsgIds::ExitOnClosure.id() => Ok(SubmsgIds::ExitOnClosure),
+
             unknown => Err(StdError::generic_err(format!(
                 "unknown reply message id: {}",
                 unknown
@@ -63,13 +58,10 @@ impl SubmsgIds {
             SubmsgIds::SellAsset => 3,
             SubmsgIds::DepositOnReply => 4,
             SubmsgIds::Exit => 5,
-            SubmsgIds::RedeemStable => 6,
-            SubmsgIds::ReturnStable => 7,
+            SubmsgIds::WithdrawCollateral => 6,
+            SubmsgIds::RedeemStable => 7,
             SubmsgIds::BuyAsset => 8,
             SubmsgIds::BurnAsset => 9,
-            SubmsgIds::WithdrawOnReply => 10,
-            SubmsgIds::CloseOnReply => 11,
-            SubmsgIds::ExitOnClosure => 12,
         }
     }
 }

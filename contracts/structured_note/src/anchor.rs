@@ -2,7 +2,7 @@ use cosmwasm_bignumber::Uint256;
 use cosmwasm_std::{Coin, CosmosMsg, Response, StdResult, SubMsg, to_binary, Uint128, WasmMsg};
 use cw20::Cw20ExecuteMsg;
 
-use structured_note_package::anchor::{AnchorMarketMsg, MirrorMintCW20HookMsg};
+use structured_note_package::anchor::{AnchorCW20HookMsg, AnchorMarketMsg};
 
 use crate::state::{Config, WithdrawType};
 use crate::SubmsgIds;
@@ -33,12 +33,7 @@ pub fn deposit_stable(config: Config, open_cdp: bool, deposit_amount: Uint256) -
         ]))
 }
 
-pub fn redeem_stable(config: Config, amount: Uint128, withdraw_type: WithdrawType) -> StdResult<Response> {
-    let submsg_id = match withdraw_type {
-        WithdrawType::Raw => SubmsgIds::ReturnStable.id(),
-        _ => SubmsgIds::BuyAsset.id(),
-    };
-
+pub fn redeem_stable(config: Config, amount: Uint128) -> StdResult<Response> {
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
             CosmosMsg::Wasm(WasmMsg::Execute {
@@ -46,11 +41,11 @@ pub fn redeem_stable(config: Config, amount: Uint128, withdraw_type: WithdrawTyp
                 msg: to_binary(&Cw20ExecuteMsg::Send {
                     contract: config.anchor_market_contract.to_string(),
                     amount: amount,
-                    msg: to_binary(&MirrorMintCW20HookMsg::RedeemStable {})?,
+                    msg: to_binary(&AnchorCW20HookMsg::RedeemStable {})?,
                 })?,
                 funds: vec![],
             }),
-            submsg_id,
+            SubmsgIds::RedeemStable.id(),
         ))
         .add_attributes(vec![
             ("action", "redeem_stable"),

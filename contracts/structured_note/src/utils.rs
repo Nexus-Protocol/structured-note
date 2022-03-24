@@ -1,4 +1,4 @@
-use cosmwasm_std::{Decimal, Event, StdError, StdResult, Uint128};
+use cosmwasm_std::{Addr, BalanceResponse, BankQuery, Decimal, Event, QuerierWrapper, QueryRequest, StdError, StdResult, Uint128};
 
 // Math
 const DECIMAL_FRACTIONAL: Uint128 = Uint128::new(1_000_000_000u128);
@@ -75,4 +75,16 @@ pub fn get_amount_from_asset_as_string(data: &str) -> Option<String> {
         }
     }
     None
+}
+
+pub fn query_balance(
+    querier: &QuerierWrapper,
+    account_addr: &Addr,
+    denom: &String,
+) -> StdResult<Uint128> {
+    let balance: BalanceResponse = querier.query(&QueryRequest::Bank(BankQuery::Balance {
+        address: account_addr.to_string(),
+        denom: denom.to_string(),
+    }))?;
+    Ok(balance.amount.amount)
 }

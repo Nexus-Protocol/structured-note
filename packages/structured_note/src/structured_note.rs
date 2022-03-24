@@ -13,23 +13,21 @@ pub enum ExecuteMsg {
         leverage: Option<u8>,
         aim_collateral_ratio: Decimal,
     },
-    PlaneDeposit {
+    RawDeposit {
         masset_token: String,
-    },
-    PlaneMint {
-        masset_token: String,
-    },
-    ClosePosition {
-        masset_token: String,
+        aim_collateral_amount: String,
     },
     Withdraw {
         masset_token: String,
-        amount: Uint128,
+        aim_collateral_amount: Uint128,
         aim_collateral_ratio: Decimal,
     },
-    PlaneWithdraw {
+    RawWithdraw {
         masset_token: String,
-        amount: Uint128,
+        aim_collateral_amount: Uint128,
+    },
+    ClosePosition {
+        masset_token: String,
     },
 }
 

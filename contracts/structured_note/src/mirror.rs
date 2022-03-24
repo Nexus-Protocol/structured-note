@@ -90,9 +90,9 @@ pub fn get_assets_prices(deps: Deps, mirror_mint_config: &MirrorMintConfigRespon
     let collateral_price = query_collateral_price(deps, &collateral_oracle, &config.aterra_addr)?;
 
     let oracle_addr = deps.api.addr_validate(&mirror_mint_config.oracle)?;
-    let asset_price = query_asset_price(deps, &oracle_addr, masset_token, config.stable_denom.clone())?;
+    let masset_price = query_asset_price(deps, &oracle_addr, masset_token, config.stable_denom.clone())?;
 
-    Ok((collateral_price, asset_price))
+    Ok((collateral_price, masset_price))
 }
 
 pub fn open_cdp(config: Config, state: DepositState, received_aterra_amount: Uint128) -> StdResult<Response> {
@@ -193,7 +193,7 @@ pub fn withdraw_collateral(config: Config, cdp_idx: Uint128, amount_to_withdraw:
                 }),
             })?,
             funds: vec![],
-        }), SubmsgIds::RedeemStable.id(),
+        }), SubmsgIds::WithdrawCollateral.id(),
         )).add_attributes(vec![
         ("action", "withdraw_collateral"),
         ("cdp_idx", &cdp_idx.to_string()),
@@ -202,12 +202,6 @@ pub fn withdraw_collateral(config: Config, cdp_idx: Uint128, amount_to_withdraw:
 }
 
 pub fn burn_asset(config: Config, state: WithdrawState, cdp_idx: Uint128, return_amount: Uint128) -> StdResult<Response> {
-    //Check iteration index for using this method on withdraw not only closure
-    let submsg_id = match state.withdraw_type {
-        WithdrawType::Simple => SubmsgIds::ReturnStable.id(),
-        _ => SubmsgIds::WithdrawOnReply.id(),
-    };
-
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
             CosmosMsg::Wasm(WasmMsg::Execute {
@@ -221,7 +215,7 @@ pub fn burn_asset(config: Config, state: WithdrawState, cdp_idx: Uint128, return
                 })?,
                 funds: vec![],
             }),
-            submsg_id,
+            SubmsgIds::BurnAsset.id(),
         ))
         .add_attributes(vec![
             ("action", "burn_asset"),

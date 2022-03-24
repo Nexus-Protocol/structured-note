@@ -5,7 +5,7 @@ use terraswap::pair::Cw20HookMsg::Swap as Cw20HookSwap;
 use terraswap::pair::ExecuteMsg::Swap;
 use terraswap::querier::query_pair_info;
 
-use crate::state::{Config, DepositState, load_config};
+use crate::state::{Config, DepositState, load_config, WithdrawState};
 use crate::SubmsgIds;
 
 pub fn query_pair_addr(deps: Deps, terraswap_factory_addr: &Addr, masset_token: &Addr) -> StdResult<String> {
@@ -50,7 +50,7 @@ pub fn sell_asset(env: Env, state: &DepositState, minted_amount: Uint128) -> Std
         ]))
 }
 
-pub fn buy_asset(config: Config, state: DepositState, contract_addr: String, offer_amount: Uint128) -> StdResult<Response> {
+pub fn buy_asset(config: Config, state: WithdrawState, contract_addr: String, offer_amount: Uint128) -> StdResult<Response> {
     let offer_asset = Coin {
         denom: config.stable_denom.clone(),
         amount: offer_amount,
@@ -70,7 +70,7 @@ pub fn buy_asset(config: Config, state: DepositState, contract_addr: String, off
                 to: Some(contract_addr),
             })?,
             funds: vec![offer_asset],
-        }), SubmsgIds::BurnAsset.id()))
+        }), SubmsgIds::BuyAsset.id()))
         .add_attributes(vec![
             ("action", "buy_asset"),
             ("offered_amount", &stable_amount.to_string()),

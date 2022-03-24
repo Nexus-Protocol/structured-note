@@ -48,22 +48,27 @@ pub struct DepositState {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct WithdrawState {
-    pub withdraw_type: WithdrawType,
+    pub is_raw: bool,
     pub farmer_addr: Addr,
     pub masset_token: Addr,
-    pub aim_collateral_amount: Uint128,
-    pub aim_collateral_ratio: Decimal,
+    pub aim_collateral: Uint128,
+    pub aim_loan: Uint128,
     pub pair_addr: Addr,
-    pub repay_value: Uint128,
+    pub collateral_price: Decimal,
+    pub masset_price: Decimal,
+    pub safe_collateral_ratio: Decimal,
 }
 
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub enum WithdrawType {
     Raw,
+    //withdraw coll > redeem stable -> return stable
     Simple,
+    //withdraw coll > redeem stable -> buy masset > burn masset -> return stable
     Double,
-    Recursive,
+    //withdraw coll > redeem stable -> buy masset > burn masset -> withdraw collateral > redeem stable -> return stable
+    Recursive,  //withdraw coll > redeem stable -> buy masset > burn masset -> withdraw collateral > redeem stable -> ???
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -72,8 +77,8 @@ pub struct Position {
     pub masset_token: Addr,
     pub cdp_idx: Uint128,
     pub leverage: u8,
-    pub loan_amount: Uint128,
-    pub collateral_amount: Uint128,
+    pub loan: Uint128,
+    pub collateral: Uint128,
     pub aim_collateral_ratio: Decimal,
 }
 
@@ -180,7 +185,7 @@ pub fn may_load_position(storage: &dyn Storage, farmer_addr: &Addr, masset_token
 pub fn increase_position_collateral(storage: &mut dyn Storage, farmer_addr: &Addr, masset_token: &Addr, diff: Uint128) -> StdResult<Position> {
     KEY_POSITIONS.update(storage, (farmer_addr, masset_token), |mut p: Option<Position>| -> StdResult<Position> {
         if let Some(mut p) = p {
-            p.collateral_amount += diff;
+            p.collateral += diff;
             Ok(p)
         } else {
             Err(StdError::generic_err(format!(
@@ -194,7 +199,7 @@ pub fn increase_position_collateral(storage: &mut dyn Storage, farmer_addr: &Add
 pub fn decrease_position_collateral(storage: &mut dyn Storage, farmer_addr: &Addr, masset_token: &Addr, diff: Uint128) -> StdResult<Position> {
     KEY_POSITIONS.update(storage, (farmer_addr, masset_token), |mut p: Option<Position>| -> StdResult<Position> {
         if let Some(mut p) = p {
-            p.collateral_amount -= diff;
+            p.collateral -= diff;
             Ok(p)
         } else {
             Err(StdError::generic_err(format!(
@@ -208,7 +213,7 @@ pub fn decrease_position_collateral(storage: &mut dyn Storage, farmer_addr: &Add
 pub fn increase_position_loan(storage: &mut dyn Storage, farmer_addr: &Addr, masset_token: &Addr, diff: Uint128) -> StdResult<Position> {
     KEY_POSITIONS.update(storage, (farmer_addr, masset_token), |mut p: Option<Position>| -> StdResult<Position> {
         if let Some(mut p) = p {
-            p.loan_amount += diff;
+            p.loan += diff;
             Ok(p)
         } else {
             Err(StdError::generic_err(format!(
@@ -222,7 +227,7 @@ pub fn increase_position_loan(storage: &mut dyn Storage, farmer_addr: &Addr, mas
 pub fn decrease_position_loan(storage: &mut dyn Storage, farmer_addr: &Addr, masset_token: &Addr, diff: Uint128) -> StdResult<Position> {
     KEY_POSITIONS.update(storage, (farmer_addr, masset_token), |mut p: Option<Position>| -> StdResult<Position> {
         if let Some(mut p) = p {
-            p.loan_amount -= diff;
+            p.loan -= diff;
             Ok(p)
         } else {
             Err(StdError::generic_err(format!(
@@ -243,8 +248,8 @@ pub fn load_all_positions(storage: &dyn Storage) -> StdResult<Vec<Position>> {
                 masset_token: v.masset_token,
                 cdp_idx: v.cdp_idx,
                 leverage: v.leverage,
-                loan_amount: v.loan_amount,
-                collateral_amount: v.collateral_amount,
+                loan: v.loan,
+                collateral: v.collateral,
                 aim_collateral_ratio: v.aim_collateral_ratio,
             })
         })
@@ -262,8 +267,8 @@ pub fn load_positions_by_farmer_addr(storage: &dyn Storage, farmer_addr: &Addr) 
                 masset_token: v.masset_token,
                 cdp_idx: v.cdp_idx,
                 leverage: v.leverage,
-                loan_amount: v.loan_amount,
-                collateral_amount: v.collateral_amount,
+                loan: v.loan,
+                collateral: v.collateral,
                 aim_collateral_ratio: v.aim_collateral_ratio,
             })
         })

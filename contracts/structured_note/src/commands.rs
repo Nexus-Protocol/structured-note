@@ -85,8 +85,8 @@ pub fn deposit(
                 masset_token: masset_token.clone(),
                 cdp_idx: cdp.idx,
                 leverage: 0,
-                loan_amount: Default::default(),
-                collateral_amount: Default::default(),
+                loan: Default::default(),
+                collateral: Default::default(),
                 aim_collateral_ratio,
             })?;
             add_farmer_to_cdp(deps.storage, cdp.idx, info.sender, masset_token)?;
@@ -146,7 +146,7 @@ pub fn close(deps: DepsMut, info: MessageInfo, masset_token: String) -> StdResul
             aim_collateral_ratio: min_collateral_ratio,
         })?;
 
-        let withdrawable_collateral = position.collateral_amount - position.loan_amount * asset_price_in_collateral_asset * min_collateral_ratio;
+        let withdrawable_collateral = position.collateral - position.loan * asset_price_in_collateral_asset * min_collateral_ratio;
 
         decrease_position_collateral(deps.storage, &info.sender, &masset_token, withdrawable_collateral)?;
 
@@ -161,11 +161,11 @@ pub fn close(deps: DepsMut, info: MessageInfo, masset_token: String) -> StdResul
 
 pub fn close_on_reply(deps: DepsMut, state: DepositState) -> StdResult<Response> {
     if let Some(position) = may_load_position(deps.storage, &state.farmer_addr, &state.masset_token)? {
-        if position.collateral_amount.is_zero() {
+        if position.collateral.is_zero() {
             return exit_on_close(deps, state);
         };
 
-        let withdrawable_collateral = position.collateral_amount - position.loan_amount * state.asset_price_in_collateral_asset * state.aim_collateral_ratio;
+        let withdrawable_collateral = position.collateral - position.loan * state.asset_price_in_collateral_asset * state.aim_collateral_ratio;
 
         withdraw_collateral(load_config(deps.storage)?, position.cdp_idx, withdrawable_collateral)
     } else {
@@ -176,90 +176,67 @@ pub fn close_on_reply(deps: DepsMut, state: DepositState) -> StdResult<Response>
     }
 }
 
-pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_collateral_amount: Uint128, aim_collateral_ratio: Decimal) -> StdResult<Response> {
+pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_collateral: Uint128, aim_collateral_ratio: Decimal) -> StdResult<Response> {
     let masset_token = deps.api.addr_validate(&masset_token)?;
 
     if let Some(position) = may_load_position(deps.storage, &info.sender, &masset_token)? {
-        if aim_collateral_amount > position.collateral_amount {
-            return Err(StdError::generic_err(format!("aim_collateral_amount greater than current_collateral amount: {}", &position.collateral_amount)));
-        }
-
         let config = load_config(deps.storage)?;
-
         let masset_config = query_masset_config(deps.as_ref(), &masset_token)?;
-
         let safe_collateral_ratio = decimal_multiplication(&masset_config.min_collateral_ratio, &config.min_over_collateralization);
         if aim_collateral_ratio < safe_collateral_ratio {
             return Err(StdError::generic_err(format!("aim_collateral_ratio lower than safe_collateral_ratio: {}", &safe_collateral_ratio)));
         };
 
         let mirror_mint_config = query_mirror_mint_config(deps.as_ref(), config.mirror_mint_contract.to_string())?;
-        let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &deps.api.addr_validate(&mirror_mint_config.terraswap_factory)?, &masset_token)?)?;
-        let (collateral_price, asset_price) = get_assets_prices(deps.as_ref(), &mirror_mint_config, &config, &masset_token)?;
-        let asset_price_in_collateral_asset = decimal_division(collateral_price, asset_price)?;
+        let (collateral_price, masset_price) = get_assets_prices(deps.as_ref(), &mirror_mint_config, &config, &masset_token)?;
+        let masset_price_in_collateral_asset = decimal_division(collateral_price, masset_price)?;
 
-        let loan_value_in_collateral_asset = position.loan_amount * asset_price_in_collateral_asset;
-        let current_collateral_ratio = Decimal::from_ratio(position.collateral_amount, loan_value_in_collateral_asset);
+        let current_collateral_ratio = Decimal::from_ratio(position.collateral, loan_value_in_collateral_asset);
         if aim_collateral_ratio > current_collateral_ratio {
-            return Err(StdError::generic_err(format!("aim_collateral_ratio greater than current_collateral_ratio: {}", &current_collateral_ratio)));
+            return Err(StdError::generic_err(format!("aim_collateral_ratio greater than curloan_value_in_collateral_assetrent_collateral_ratio: {}", &current_collateral_ratio)));
         };
 
-        let repay_value_in_collateral_asset = loan_value_in_collateral_asset - Uint128::from(aim_collateral_amount.u128() * aim_collateral_ratio.denominator() / aim_collateral_ratio.numerator());
-        let repay_value = repay_value_in_collateral_asset * collateral_price;
-        //simple withdraw
-        if Decimal::from_ratio(aim_collateral_amount, loan_value_in_collateral_asset) > safe_collateral_ratio {
-            store_withdraw_state(deps.storage, &WithdrawState {
-                withdraw_type: WithdrawType::Simple,
-                farmer_addr: position.farmer_addr.clone(),
-                masset_token: position.masset_token.clone(),
-                aim_collateral_amount,
-                aim_collateral_ratio,
-                pair_addr: pair_addr.clone(),
-                repay_value,
-            })?;
-            let collateral_diff = position.collateral_amount - aim_collateral_amount;
-            decrease_position_collateral(deps.storage, &position.farmer_addr, &position.masset_token, collateral_diff)?;
-            withdraw_collateral(config.clone(), position.cdp_idx, collateral_diff);
-        };
+        let aim_loan_in_collateral_asset = Uint128::from(aim_collateral.u128() * aim_collateral_ratio.denominator() / aim_collateral_ratio.numerator());
+        let aim_loan = Uint128::from(aim_loan_in_collateral_asset.u128() * masset_price_in_collateral_asset.denominator() / masset_price_in_collateral_asset.numerator());
 
-        let max_withdraw_amount = position.collateral_amount - (loan_value_in_collateral_asset * safe_collateral_ratio);
+        let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &deps.api.addr_validate(&mirror_mint_config.terraswap_factory)?, &masset_token)?)?;
 
-        //double withdraw
-        if repay_value_in_collateral_asset < max_withdraw_amount {
-            //TODO:
-            // - withdraw collateral to safe_cr (max_withdraw)
-            // - burn all received aUST to get stable
-            // - buy and burn mAsset for repay_value
-            // - withdraw collateral to aim_collateral
-            // - burn all received aUST
-            // - sent all UST in contract to the farmer
-            store_withdraw_state(deps.storage, &WithdrawState {
-                withdraw_type: WithdrawType::Double,
-                farmer_addr: position.farmer_addr,
-                masset_token: position.masset_token,
-                aim_collateral_amount,
-                aim_collateral_ratio,
-                pair_addr,
-                repay_value: Uint128::default(), //not used, repay all stable in contract
-            })?;
-            decrease_position_collateral(deps.storage, &position.farmer_addr, &position.masset_token, max_withdraw_amount)?;
-            withdraw_collateral(config, position.cdp_idx, max_withdraw_amount);
-            // recursive withdraw
-        } else {
-            //TODO:
-            // - withdraw collateral to safe_cr (max_withdraw)
-            // - burn all received aUST to get stable
-            // - buy and burn mAsset for all stable in contract
-            // - call this fn again
-        }
-        Ok()
+        store_withdraw_state(deps.storage, &WithdrawState {
+            is_raw: false,
+            farmer_addr: position.farmer_addr,
+            masset_token: position.masset_token,
+            aim_collateral,
+            aim_loan,
+            pair_addr,
+            collateral_price,
+            masset_price,
+            safe_collateral_ratio,
+        });
+        let amount_to_withdraw = calculate_withdraw_amount(position.collateral, position.loan, aim_loan, masset_price_in_collateral_asset, safe_collateral_ratio);
+        withdraw_collateral(config, position.cdp_idx, amount_to_withdraw)
     } else {
-        return Err(StdError::generic_err(format!(
+        Err(StdError::generic_err(format!(
             "There isn't position: farmer_addr: {}, masset_token: {}.",
             &info.sender.to_string(),
-            &masset_token.to_string())));
+            &masset_token.to_string())))
     }
 }
+
+pub fn is_aim_state(position: &Position, state: &WithdrawState) -> bool {
+    position.collateral == state.aim_collateral && position.loan == state.aim_loan
+}
+
+pub fn calculate_withdraw_amount(collateral: Uint128, loan: Uint128, aim_collateral: Uint128, masset_price_in_collateral_asset: Decimal, safe_collateral_ratio: Decimal) -> Uint128 {
+    let loan_in_collateral_asset = loan * masset_price_in_collateral_asset;
+    let min_safe_collateral = Uint128::from(loan_in_collateral_asset.u128() * safe_collateral_ratio.denominator() / safe_collateral_ratio.numerator());
+    let max_safe_withdraw = collateral - min_safe_collateral;
+    if aim_collateral < min_safe_collateral {
+        position.collateral - aim_collateral
+    } else {
+        max_safe_withdraw
+    }
+}
+
 
 fn exit_on_close(deps: DepsMut, state: DepositState) -> StdResult<Response> {
     remove_position(deps.storage, &state.farmer_addr, &state.masset_token);
@@ -271,8 +248,8 @@ fn exit_on_close(deps: DepsMut, state: DepositState) -> StdResult<Response> {
 pub fn return_stable(deps: DepsMut, env: Env) -> StdResult<Response> {
     if let Some(position) = may_load_position(deps.storage, farmer_addr, masset)? {
         let config = load_config(deps.storage)?;
-        if position == Uint128::zero() {
-            remove_position(deps.storage, &position.farmer_addr, &position.masset_token)?;
+        if position.collateral == Uint128::zero() {
+            remove_position(deps.storage, &position.farmer_addr, &position.masset_token);
         };
         let balance: BalanceResponse = querier.query(&QueryRequest::Bank(BankQuery::Balance {
             address: env.contract.address.to_string(),
@@ -285,7 +262,7 @@ pub fn return_stable(deps: DepsMut, env: Env) -> StdResult<Response> {
             })
             .add_attributes(vec![
                 ("action", "return_stable"),
-                ("return_amount", balance.amount.amount.to_string()),
+                ("return_amount", &balance.amount.amount.to_string()),
             ]))
     } else {
         return Err(StdError::generic_err(format!(

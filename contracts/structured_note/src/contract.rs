@@ -3,17 +3,17 @@ use std::os::macos::raw::stat;
 use std::str::FromStr;
 
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{Binary, ContractResult, Deps, DepsMut, entry_point, Env, Fraction, MessageInfo, Reply, Response, StdError, StdResult, to_binary, Uint128};
+use cosmwasm_std::{Binary, ContractResult, Decimal, Deps, DepsMut, entry_point, Env, Fraction, MessageInfo, Reply, Response, StdError, StdResult, to_binary, Uint128};
 
 use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
 use crate::anchor::redeem_stable;
-use crate::commands::{close, close_on_reply, deposit, deposit_stable_on_reply, exit, return_stable, withdraw};
-use crate::mirror::{burn_asset, deposit_to_cdp, mint_asset, open_cdp};
-use crate::state::{add_farmer_to_cdp, decrease_position_loan, increase_position_loan, increment_iteration_index, load_config, load_deposit_state, load_withdraw_state, may_load_position, Position, save_position, WithdrawState, WithdrawType};
+use crate::commands::{calculate_withdraw_amount, close, close_on_reply, deposit, deposit_stable_on_reply, exit, is_aim_state, return_stable, withdraw};
+use crate::mirror::{burn_asset, deposit_to_cdp, get_assets_prices, mint_asset, open_cdp, withdraw_collateral};
+use crate::state::{add_farmer_to_cdp, decrease_position_collateral, decrease_position_loan, increase_position_loan, increment_iteration_index, load_config, load_deposit_state, load_withdraw_state, may_load_position, Position, save_position, WithdrawState, WithdrawType};
 use crate::SubmsgIds;
 use crate::terraswap::{buy_asset, sell_asset};
-use crate::utils::{decimal_multiplication, get_action_name, get_amount_from_response_asset_as_string_attr, get_amount_from_response_raw_attr};
+use crate::utils::{decimal_division, decimal_multiplication, get_action_name, get_amount_from_response_asset_as_string_attr, get_amount_from_response_raw_attr, query_balance};
 
 #[entry_point]
 pub fn instantiate(
@@ -37,14 +37,15 @@ pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> 
             aim_collateral_ratio,
         } => {
             deposit(deps, info, masset_token, leverage, aim_collateral_ratio)
-        },
-        ExecuteMsg::PlaneDeposit { masset_token } => {},
+        }
+        ExecuteMsg::RawDeposit { masset_token, aim_collateral_amount } => {}
         ExecuteMsg::ClosePosition { masset_token } => {
             close(deps, info, masset_token)
         }
-        ExecuteMsg::Withdraw { masset_token, amount, aim_collateral_ratio } => {
+        ExecuteMsg::Withdraw { masset_token, aim_collateral_amount, aim_collateral_ratio } => {
             withdraw(deps, info, masset_token, amount, aim_collateral_ratio)
         }
+        ExecuteMsg::RawWithdraw { masset_token, aim_collateral_amount } => {}
     }
 }
 
@@ -70,7 +71,7 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
             let state = load_deposit_state(deps.storage)?;
 
             let (cdp_idx, collateral_amount, loan_amount) = if let Some(position) = may_load_position(deps.storage, &state.farmer_addr, &state.masset_token)? {
-                (position.cdp_idx, position.collateral_amount, position.loan_amount)
+                (position.cdp_idx, position.collateral, position.loan)
             } else {
                 return Err(StdError::generic_err(format!(
                     "There isn't position: farmer_addr: {}, masset_token: {}.",
@@ -102,8 +103,8 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
                     masset_token: state.masset_token.clone(),
                     cdp_idx,
                     leverage: state.leverage,
-                    loan_amount: minted_amount,
-                    collateral_amount,
+                    loan: minted_amount,
+                    collateral: collateral_amount,
                     aim_collateral_ratio: state.aim_collateral_ratio,
                 })?;
                 add_farmer_to_cdp(deps.storage, cdp_idx, state.farmer_addr, state.masset_token)?;
@@ -117,35 +118,50 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
         SubmsgIds::Exit => {
             exit()
         }
-        SubmsgIds::RedeemStable => {
+        SubmsgIds::WithdrawCollateral => {
             let received_aterra_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events, "withdraw_amount".to_string())?)?;
             let state = load_withdraw_state(deps.storage)?;
-            redeem_stable(load_config(deps.storage)?, received_aterra_amount, state.withdraw_type)
+            decrease_position_collateral(deps.storage, &state.farmer_addr, &state.masset_token, received_aterra_amount)?;
+            redeem_stable(load_config(deps.storage)?, received_aterra_amount)
         }
-        SubmsgIds::ReturnStable => {
-            return_stable(deps, env)?
+        SubmsgIds::RedeemStable => {
+            let state = load_withdraw_state(deps.storage)?;
+            let config = load_config(deps.storage)?;
+            if state.is_raw {
+                return return_stable(deps, env);
+            };
+            if let Some(position) = may_load_position(deps.storage, &state.farmer_addr, &state.masset_token)? {
+                if is_aim_state(&position, &state) {
+                    return return_stable(deps, env);
+                };
+
+                let repay_to_aim_value = (position.loan - state.aim_loan) * state.masset_price;
+                let stable_balance = query_balance(&deps.querier, &env.contract.address, &config.stable_denom)?;
+
+                let offer_amount = stable_balance.min(repay_to_aim_value);
+                buy_asset(config, state, env.contract.address.to_string(), offer_amount)
+            } else {
+                Err(StdError::generic_err(format!(
+                    "There isn't position: farmer_addr: {}, masset_token: {}.",
+                    &state.farmer_addr.to_string(),
+                    &state.masset_token.to_string())))
+            }
         }
         SubmsgIds::BuyAsset => {
-            let state = load_withdraw_state(deps.storage)?;
-            let offer_amount = if state.withdraw_type == WithdrawType::Simple {
-                state.repay_value
-            } else {
-                Uint128::from_str(&get_amount_from_response_raw_attr(events, "redeem_amount".to_string())?)?;
-            };
-            buy_asset(load_config(deps.storage)?, load_deposit_state(deps.storage)?, env.contract.address.to_string(), offer_amount)
-        }
-        SubmsgIds::BurnAsset => {
             let return_amount = Uint128::from_str(&get_amount_from_response_raw_attr(events, "return_amount".to_string())?)?;
-            let position = decrease_position_loan(deps.storage, &state.farmer_addr, &state.masset_token, return_amount)?;
-            let state = load_withdraw_state(deps.storage)?;
             burn_asset(load_config(deps.storage)?, load_withdraw_state(deps.storage)?, position.cdp_idx, return_amount)
         }
-        SubmsgIds::CloseOnReply => {
-            let state = load_deposit_state(deps.storage)?;
-            close_on_reply(deps, state)
-        }
-        SubmsgIds::WithdrawOnReply => {
-            withdraw_on_reply()
+        SubmsgIds::BurnAsset => {
+            let burn_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events, "burn_amount".to_string())?)?;
+            let position = decrease_position_loan(deps.storage, &state.farmer_addr, &state.masset_token, burn_amount)?;
+            let state = load_withdraw_state(deps.storage)?;
+            let config = load_config(deps.storage)?;
+            if is_aim_state(&position, &state) {
+                return return_stable(deps, env);
+            };
+            let masset_price_in_collateral_asset = decimal_division(state.collateral_price, state.masset_price)?;
+            let amount_to_withdraw = calculate_withdraw_amount(position.collateral, position.loan, state.aim_collateral, masset_price_in_collateral_asset, state.safe_collateral_ratio);
+            withdraw_collateral(config, position.cdp_idx, amount_to_withdraw)
         }
     }
 }
