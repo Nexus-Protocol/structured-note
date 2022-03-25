@@ -33,7 +33,7 @@ pub fn redeem_stable(config: Config, amount: Uint128) -> StdResult<Response> {
                 contract_addr: config.aterra_addr.to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Send {
                     contract: config.anchor_market_contract.to_string(),
-                    amount: amount,
+                    amount,
                     msg: to_binary(&AnchorCW20HookMsg::RedeemStable {})?,
                 })?,
                 funds: vec![],
