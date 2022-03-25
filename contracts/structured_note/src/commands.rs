@@ -1,12 +1,12 @@
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{BalanceResponse, BankQuery, Decimal, Deps, DepsMut, Env, Fraction, MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128};
+use cosmwasm_std::{BalanceResponse, BankQuery, Decimal, Deps, DepsMut, Env, Fraction, MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128, WasmMsg};
 use cw20::Cw20ExecuteMsg;
 
 use structured_note_package::mirror::MirrorAssetConfigResponse;
 
 use crate::anchor::deposit_stable as anc_deposit_stable;
 use crate::mirror::{get_assets_prices, query_masset_config, query_mirror_mint_config, withdraw_collateral};
-use crate::state::{add_farmer_to_cdp, decrease_position_collateral, DepositState, load_config, may_load_cdp, may_load_position, Position, remove_farmer_from_cdp, remove_position, save_is_closure, save_position, store_deposit_state, store_withdraw_state, WithdrawState, WithdrawType};
+use crate::state::{add_farmer_to_cdp, decrease_position_collateral, DepositState, load_config, may_load_cdp, may_load_position, Position, remove_farmer_from_cdp, remove_position, save_deposit_state, save_is_closure, save_is_open, save_position, save_withdraw_state, update_is_open, WithdrawState, WithdrawType};
 use crate::terraswap::query_pair_addr;
 use crate::utils::{decimal_division, decimal_multiplication};
 
@@ -17,7 +17,7 @@ pub fn deposit(
     leverage: Option<u8>,
     aim_collateral_ratio: Decimal,
 ) -> StdResult<Response> {
-    let mut open_cdp = false;
+    save_is_open(deps.storage, false)?;
     let config = load_config(deps.storage)?;
 
     let mirror_mint_config = query_mirror_mint_config(deps.as_ref(), config.mirror_mint_contract.to_string())?;
@@ -50,7 +50,7 @@ pub fn deposit(
     };
 
     if let Some(p) = may_load_position(deps.storage, &info.sender, &masset_token)? {
-        store_deposit_state(deps.storage, &DepositState {
+        save_deposit_state(deps.storage, &DepositState {
             farmer_addr: p.farmer_addr,
             masset_token: p.masset_token,
             leverage: p.leverage,
@@ -64,7 +64,7 @@ pub fn deposit(
             if !(1..=5).contains(&leverage) {
                 return Err(StdError::generic_err("Invalid message: leverage iterations amount should be from 1 to 5."));
             }
-            store_deposit_state(deps.storage, &DepositState {
+            save_deposit_state(deps.storage, &DepositState {
                 farmer_addr: info.sender.clone(),
                 masset_token: masset_token.clone(),
                 leverage,
@@ -91,18 +91,17 @@ pub fn deposit(
             })?;
             add_farmer_to_cdp(deps.storage, cdp.idx, info.sender, masset_token)?;
         } else {
-            open_cdp = true;
+            update_is_open(deps.storage, true)?;
         }
     }
-
-    anc_deposit_stable(config, open_cdp, deposit_amount)
+    anc_deposit_stable(config, deposit_amount)
 }
 
 pub fn deposit_stable_on_reply(
     deps: DepsMut,
     deposit_amount: Uint256,
 ) -> StdResult<Response> {
-    anc_deposit_stable(load_config(deps.storage)?, false, deposit_amount)
+    anc_deposit_stable(load_config(deps.storage)?, deposit_amount)
 }
 
 pub fn validate_masset(masset_config: &MirrorAssetConfigResponse) -> StdResult<Response> {
@@ -115,65 +114,15 @@ pub fn validate_masset(masset_config: &MirrorAssetConfigResponse) -> StdResult<R
     Ok(Default::default())
 }
 
-pub fn exit() -> StdResult<Response> {
-    //TODO: load position and share it in attributes?
+pub fn exit(position: Position) -> StdResult<Response> {
     Ok(Response::new()
-        .add_attribute("method", "exit"))
-}
-
-pub fn close(deps: DepsMut, info: MessageInfo, masset_token: String) -> StdResult<Response> {
-    let masset_token = deps.api.addr_validate(&masset_token)?;
-    let config = load_config(deps.storage)?;
-    let mirror_mint_config = query_mirror_mint_config(deps.as_ref(), config.mirror_mint_contract.to_string())?;
-
-    let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &deps.api.addr_validate(&mirror_mint_config.terraswap_factory)?, &masset_token)?)?;
-
-    let (collateral_price, asset_price) = get_assets_prices(deps.as_ref(), &mirror_mint_config, &config, &masset_token)?;
-    let asset_price_in_collateral_asset = decimal_division(collateral_price, asset_price)?;
-
-    let masset_config = query_masset_config(deps.as_ref(), &masset_token)?;
-
-    let min_collateral_ratio = decimal_multiplication(&masset_config.min_collateral_ratio, &config.min_over_collateralization);
-
-    if let Some(position) = may_load_position(deps.storage, &info.sender, &masset_token)? {
-        store_deposit_state(deps.storage, &DepositState {
-            farmer_addr: position.farmer_addr,
-            masset_token: position.masset_token,
-            leverage: position.leverage,
-            cur_iteration_index: 0,
-            asset_price_in_collateral_asset: asset_price_in_collateral_asset.clone(),
-            pair_addr,
-            aim_collateral_ratio: min_collateral_ratio,
-        })?;
-
-        let withdrawable_collateral = position.collateral - position.loan * asset_price_in_collateral_asset * min_collateral_ratio;
-
-        decrease_position_collateral(deps.storage, &info.sender, &masset_token, withdrawable_collateral)?;
-
-        withdraw_collateral(config, position.cdp_idx, withdrawable_collateral)
-    } else {
-        return Err(StdError::generic_err(format!(
-            "There isn't position: farmer_addr: {}, masset_token: {}.",
-            &info.sender.to_string(),
-            &masset_token.to_string())));
-    }
-}
-
-pub fn close_on_reply(deps: DepsMut, state: DepositState) -> StdResult<Response> {
-    if let Some(position) = may_load_position(deps.storage, &state.farmer_addr, &state.masset_token)? {
-        if position.collateral.is_zero() {
-            return exit_on_close(deps, state);
-        };
-
-        let withdrawable_collateral = position.collateral - position.loan * state.asset_price_in_collateral_asset * state.aim_collateral_ratio;
-
-        withdraw_collateral(load_config(deps.storage)?, position.cdp_idx, withdrawable_collateral)
-    } else {
-        return Err(StdError::generic_err(format!(
-            "There isn't position: farmer_addr: {}, masset_token: {}.",
-            &state.farmer_addr.to_string(),
-            &state.masset_token.to_string())));
-    }
+        .add_attributes(vec![
+            ("action", "deposit_stable"),
+            ("farmet_addr", &position.farmer_addr.to_string()),
+            ("masset_token", &position.masset_token.to_string()),
+            ("collateral", &position.collateral.to_string()),
+            ("loan", &position.loan.to_string()),
+        ]))
 }
 
 pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_collateral: Uint128, aim_collateral_ratio: Decimal) -> StdResult<Response> {
@@ -205,7 +154,7 @@ pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_coll
 
         let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &deps.api.addr_validate(&mirror_mint_config.terraswap_factory)?, &masset_token)?)?;
 
-        store_withdraw_state(deps.storage, &WithdrawState {
+        save_withdraw_state(deps.storage, &WithdrawState {
             is_raw: false,
             farmer_addr: position.farmer_addr,
             masset_token: position.masset_token,
@@ -245,7 +194,7 @@ pub fn raw_withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_
 
         let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &deps.api.addr_validate(&mirror_mint_config.terraswap_factory)?, &masset_token)?)?;
 
-        store_withdraw_state(deps.storage, &WithdrawState {
+        save_withdraw_state(deps.storage, &WithdrawState {
             is_raw: true,
             farmer_addr: position.farmer_addr,
             masset_token: position.masset_token,
@@ -278,14 +227,6 @@ pub fn calculate_withdraw_amount(collateral: Uint128, loan: Uint128, aim_collate
     } else {
         max_safe_withdraw
     }
-}
-
-
-fn exit_on_close(deps: DepsMut, state: DepositState) -> StdResult<Response> {
-    remove_position(deps.storage, &state.farmer_addr, &state.masset_token);
-    remove_farmer_from_cdp(deps.storage, &state.farmer_addr, &state.masset_token)?;
-    Ok(Response::new()
-        .add_attribute("action", "close_position"))
 }
 
 pub fn return_stable(deps: DepsMut, env: Env) -> StdResult<Response> {

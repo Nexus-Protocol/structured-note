@@ -6,7 +6,7 @@ use terraswap::asset::{Asset, AssetInfo};
 use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorCollateralOracleQueryMsg, MirrorCollateralPriceResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg, MirrorOracleQueryMsg, MirrorPriceResponse};
 
 use crate::{concat, SubmsgIds};
-use crate::state::{Config, DepositState, increase_position_collateral, increment_iteration_index, load_config, WithdrawState, WithdrawType};
+use crate::state::{Config, DepositState, increase_iteration_index, increase_position_collateral, load_config, WithdrawState, WithdrawType};
 use crate::utils::decimal_division;
 
 pub fn query_mirror_mint_config(deps: Deps, mirror_mint_contract: String) -> StdResult<MirrorMintConfigResponse> {
@@ -113,7 +113,7 @@ pub fn open_cdp(config: Config, state: DepositState, received_aterra_amount: Uin
                 })?,
                 funds: vec![],
             }),
-            SubmsgIds::SellAsset.id(),
+            SubmsgIds::OpenCDP.id(),
         ))
         .add_attributes(vec![
             ("action", "open_cdp"),
@@ -123,20 +123,7 @@ pub fn open_cdp(config: Config, state: DepositState, received_aterra_amount: Uin
         ]))
 }
 
-pub fn deposit_to_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResult<Response> {
-    let config = load_config(deps.storage)?;
-    //Increment iteration index here 'cause exit is on this step
-    let state = increment_iteration_index(deps.storage)?;
-
-    let submsg_id =
-        if state.cur_iteration_index > state.leverage {
-            SubmsgIds::Exit.id()
-        } else {
-            SubmsgIds::MintAsset.id()
-        };
-
-    let position = increase_position_collateral(deps.storage, &state.farmer_addr, &state.masset_token, received_aterra_amount)?;
-
+pub fn deposit_to_cdp(config: Config, cdp_idx: Uint128, received_aterra_amount: Uint128) -> StdResult<Response> {
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
             CosmosMsg::Wasm(WasmMsg::Execute {
@@ -145,12 +132,12 @@ pub fn deposit_to_cdp(deps: DepsMut, received_aterra_amount: Uint128) -> StdResu
                     contract: config.mirror_mint_contract.to_string(),
                     amount: received_aterra_amount,
                     msg: to_binary(&MirrorMintCW20HookMsg::Deposit {
-                        position_idx: position.cdp_idx,
+                        position_idx: cdp_idx,
                     })?,
                 })?,
                 funds: vec![],
             }),
-            submsg_id,
+            SubmsgIds::DepositToCDP.id(),
         ))
         .add_attributes(vec![
             ("action", "deposit_to_cdp"),
@@ -172,7 +159,7 @@ pub fn mint_asset(config: Config, cdp_idx: Uint128, masset_token: String, amount
                 short_params: None,
             })?,
             funds: vec![],
-        }), SubmsgIds::SellAsset.id(),
+        }), SubmsgIds::MintAsset.id(),
         ))
         .add_attributes(vec![
             ("action", "mint_asset"),

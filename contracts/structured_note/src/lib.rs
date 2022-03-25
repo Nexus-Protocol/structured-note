@@ -12,11 +12,11 @@ mod utils;
 
 pub enum SubmsgIds {
     //Deposit
+    DepositStable,
     OpenCDP,
     DepositToCDP,
     MintAsset,
-    SellAsset,
-    DepositOnReply,
+    SellMAsset,
     Exit,
     //Withdraw
     WithdrawCollateral,
@@ -30,11 +30,11 @@ impl TryFrom<u64> for SubmsgIds {
 
     fn try_from(v: u64) -> Result<Self, Self::Error> {
         match v {
+            x if x == SubmsgIds::DepositStable.id() => Ok(SubmsgIds::DepositStable),
             x if x == SubmsgIds::OpenCDP.id() => Ok(SubmsgIds::OpenCDP),
             x if x == SubmsgIds::DepositToCDP.id() => Ok(SubmsgIds::DepositToCDP),
             x if x == SubmsgIds::MintAsset.id() => Ok(SubmsgIds::MintAsset),
-            x if x == SubmsgIds::SellAsset.id() => Ok(SubmsgIds::SellAsset),
-            x if x == SubmsgIds::DepositOnReply.id() => Ok(SubmsgIds::DepositOnReply),
+            x if x == SubmsgIds::SellMAsset.id() => Ok(SubmsgIds::SellMAsset),
             x if x == SubmsgIds::Exit.id() => Ok(SubmsgIds::Exit),
             x if x == SubmsgIds::WithdrawCollateral.id() => Ok(SubmsgIds::WithdrawCollateral),
             x if x == SubmsgIds::RedeemStable.id() => Ok(SubmsgIds::RedeemStable),
@@ -55,7 +55,7 @@ impl SubmsgIds {
             SubmsgIds::OpenCDP => 0,
             SubmsgIds::DepositToCDP => 1,
             SubmsgIds::MintAsset => 2,
-            SubmsgIds::SellAsset => 3,
+            SubmsgIds::SellMAsset => 3,
             SubmsgIds::DepositOnReply => 4,
             SubmsgIds::Exit => 5,
             SubmsgIds::WithdrawCollateral => 6,

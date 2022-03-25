@@ -25,7 +25,7 @@ pub fn query_pair_addr(deps: Deps, terraswap_factory_addr: &Addr, masset_token: 
     Ok(pair_info.contract_addr)
 }
 
-pub fn sell_asset(env: Env, state: &DepositState, minted_amount: Uint128) -> StdResult<Response> {
+pub fn sell_masset(env: Env, state: &DepositState, minted_amount: Uint128) -> StdResult<Response> {
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
             CosmosMsg::Wasm(WasmMsg::Execute {
@@ -41,7 +41,7 @@ pub fn sell_asset(env: Env, state: &DepositState, minted_amount: Uint128) -> Std
                 })?,
                 funds: vec![],
             }),
-            SubmsgIds::DepositOnReply.id(),
+            SubmsgIds::SellMAsset.id(),
         ))
         .add_attributes(vec![
             ("action", "sell_asset"),

@@ -13,7 +13,7 @@ static KEY_WITHDRAW_STATE: Item<WithdrawState> = Item::new("withdraw_state");
 static KEY_CDPS: Map<&Addr, CDP> = Map::new("cdps");
 // Map<(position.farmer_addr, position.masset_token), Position>
 static KEY_POSITIONS: Map<(&Addr, &Addr), Position> = Map::new("positions");
-static KEY_IS_CLOSURE: Item<bool> = Item::new("is_closure");
+static KEY_IS_OPEN: Item<bool> = Item::new("is_open");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
@@ -59,18 +59,6 @@ pub struct WithdrawState {
     pub safe_collateral_ratio: Decimal,
 }
 
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub enum WithdrawType {
-    Raw,
-    //withdraw coll > redeem stable -> return stable
-    Simple,
-    //withdraw coll > redeem stable -> buy masset > burn masset -> return stable
-    Double,
-    //withdraw coll > redeem stable -> buy masset > burn masset -> withdraw collateral > redeem stable -> return stable
-    Recursive,  //withdraw coll > redeem stable -> buy masset > burn masset -> withdraw collateral > redeem stable -> ???
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Position {
     pub farmer_addr: Addr,
@@ -86,7 +74,7 @@ pub fn load_config(storage: &dyn Storage) -> StdResult<Config> {
     KEY_CONFIG.load(storage)
 }
 
-pub fn store_config(storage: &mut dyn Storage, config: &Config) -> StdResult<()> {
+pub fn save_config(storage: &mut dyn Storage, config: &Config) -> StdResult<()> {
     KEY_CONFIG.save(storage, config)
 }
 
@@ -159,11 +147,11 @@ pub fn load_deposit_state(storage: &dyn Storage) -> StdResult<DepositState> {
     KEY_DEPOSIT_STATE.load(storage)
 }
 
-pub fn store_deposit_state(storage: &mut dyn Storage, data: &DepositState) -> StdResult<()> {
+pub fn save_deposit_state(storage: &mut dyn Storage, data: &DepositState) -> StdResult<()> {
     KEY_DEPOSIT_STATE.save(storage, data)
 }
 
-pub fn increment_iteration_index(storage: &mut dyn Storage) -> StdResult<DepositState> {
+pub fn increase_iteration_index(storage: &mut dyn Storage) -> StdResult<DepositState> {
     KEY_DEPOSIT_STATE.update(storage, |mut s: DepositState| -> StdResult<DepositState> {
         s.cur_iteration_index += 1;
         Ok(s)
@@ -174,12 +162,16 @@ pub fn load_withdraw_state(storage: &dyn Storage) -> StdResult<WithdrawState> {
     KEY_WITHDRAW_STATE.load(storage)
 }
 
-pub fn store_withdraw_state(storage: &mut dyn Storage, data: &WithdrawState) -> StdResult<()> {
+pub fn save_withdraw_state(storage: &mut dyn Storage, data: &WithdrawState) -> StdResult<()> {
     KEY_WITHDRAW_STATE.save(storage, data)
 }
 
 pub fn may_load_position(storage: &dyn Storage, farmer_addr: &Addr, masset_token: &Addr) -> StdResult<Option<Position>> {
     KEY_POSITIONS.may_load(storage, (farmer_addr, masset_token))
+}
+
+pub fn load_position(storage: &dyn Storage, farmer_addr: &Addr, masset_token: &Addr) -> StdResult<Position> {
+    KEY_POSITIONS.load(storage, (farmer_addr, masset_token))
 }
 
 pub fn increase_position_collateral(storage: &mut dyn Storage, farmer_addr: &Addr, masset_token: &Addr, diff: Uint128) -> StdResult<Position> {
@@ -281,4 +273,19 @@ pub fn save_position(storage: &mut dyn Storage, position: &Position) -> StdResul
 
 pub fn remove_position(storage: &mut dyn Storage, farmer_addr: &Addr, masset_token: &Addr) {
     KEY_POSITIONS.remove(storage, (farmer_addr, masset_token))
+}
+
+pub fn save_is_open(storage: &mut dyn Storage, is_open: bool) -> StdResult<()> {
+    KEY_IS_OPEN.save(storage, &is_open)
+}
+
+pub fn load_is_open(storage: &dyn Storage) -> StdResult<bool> {
+    KEY_IS_OPEN.load(storage)
+}
+
+pub fn update_is_open(storage: &mut dyn Storage, data: bool) -> StdResult<bool> {
+    KEY_IS_OPEN.update(storage, |mut is_open: bool| -> StdResult<_> {
+        is_open = data;
+        Ok(is_open)
+    })
 }
