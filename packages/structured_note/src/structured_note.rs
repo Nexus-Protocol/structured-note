@@ -15,7 +15,6 @@ pub enum ExecuteMsg {
     },
     RawDeposit {
         masset_token: String,
-        aim_collateral: String,
     },
     Withdraw {
         masset_token: String,
@@ -24,7 +23,7 @@ pub enum ExecuteMsg {
     },
     RawWithdraw {
         masset_token: String,
-        aim_collateral: Uint128,
+        amount: Uint128,
     },
 }
 

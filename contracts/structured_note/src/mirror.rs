@@ -151,7 +151,7 @@ pub fn mint_masset(config: Config, cdp_idx: Uint128, masset_token: String, amoun
             msg: to_binary(&MirrorMintExecuteMsg::Mint {
                 position_idx: cdp_idx,
                 asset: Asset {
-                    info: AssetInfo::Token { contract_addr: masset_token },
+                    info: AssetInfo::Token { contract_addr: masset_token.clone() },
                     amount: amount_to_mint,
                 },
                 short_params: None,

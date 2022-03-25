@@ -5,7 +5,7 @@ use structured_note_package::mirror::MirrorAssetConfigResponse;
 
 use crate::anchor::deposit_stable as anc_deposit_stable;
 use crate::mirror::{get_assets_prices, query_masset_config, query_mirror_mint_config, withdraw_collateral};
-use crate::state::{add_farmer_to_cdp, DepositState, load_config, load_position, load_withdraw_state, may_load_cdp, may_load_position, Position, remove_farmer_from_cdp, remove_position, save_deposit_state, save_is_open, save_position, save_withdraw_state, update_is_open, WithdrawState};
+use crate::state::{add_farmer_to_cdp, DepositState, load_config, load_position, load_withdraw_state, may_load_cdp, may_load_position, Position, remove_farmer_from_cdp, remove_position, save_deposit_state, save_is_open, save_is_raw, save_position, save_withdraw_state, update_is_open, WithdrawState};
 use crate::terraswap::query_pair_addr;
 use crate::utils::{decimal_division, decimal_multiplication};
 
@@ -16,6 +16,7 @@ pub fn deposit(
     leverage: Option<u8>,
     aim_collateral_ratio: Decimal,
 ) -> StdResult<Response> {
+    save_is_raw(deps.storage, false)?;
     save_is_open(deps.storage, false)?;
     let config = load_config(deps.storage)?;
 
@@ -79,7 +80,7 @@ pub fn deposit(
                 &masset_token.to_string())));
         }
         if let Some(cdp) = may_load_cdp(deps.storage, &masset_token)? {
-            let position = save_position(deps.storage, &Position {
+            save_position(deps.storage, &Position {
                 farmer_addr: info.sender.clone(),
                 masset_token: masset_token.clone(),
                 cdp_idx: cdp.idx,
@@ -94,6 +95,50 @@ pub fn deposit(
         }
     }
     anc_deposit_stable(config, deposit_amount)
+}
+
+pub fn raw_deposit(
+    deps: DepsMut,
+    info: MessageInfo,
+    masset_token: String,
+) -> StdResult<Response> {
+    save_is_raw(deps.storage, true)?;
+    save_is_open(deps.storage, false)?;
+    let config = load_config(deps.storage)?;
+
+    let masset_token = deps.api.addr_validate(&masset_token)?;
+    let masset_config = query_masset_config(deps.as_ref(), &masset_token)?;
+
+    validate_masset(&masset_config)?;
+
+    let deposit_amount: Uint256 = info
+        .funds
+        .iter()
+        .find(|c| c.denom == config.stable_denom)
+        .map(|c| Uint256::from(c.amount))
+        .unwrap_or_else(Uint256::zero);
+
+    if deposit_amount.is_zero() {
+        return Err(StdError::generic_err("Deposit amount is zero"));
+    };
+
+    if let Some(p) = may_load_position(deps.storage, &info.sender, &masset_token)? {
+        save_deposit_state(deps.storage, &DepositState {
+            farmer_addr: p.farmer_addr.clone(),
+            masset_token: p.masset_token,
+            leverage: p.leverage,
+            cur_iteration_index: 0,
+            asset_price_in_collateral_asset: Decimal::default(),    //not used on raw withdraw
+            pair_addr: p.farmer_addr,   //not used on raw withdraw
+            aim_collateral_ratio: Decimal::default(),   // not used on raw withdraw
+        })?;
+        anc_deposit_stable(config, deposit_amount)
+    } else {
+        return Err(StdError::generic_err(format!(
+            "There isn't position: farmer_addr: {}, masset_token: {}. To create new position provide 'leverage'",
+            &info.sender.to_string(),
+            &masset_token.to_string())));
+    }
 }
 
 pub fn validate_masset(masset_config: &MirrorAssetConfigResponse) -> StdResult<Response> {
@@ -147,7 +192,6 @@ pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_coll
         let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &deps.api.addr_validate(&mirror_mint_config.terraswap_factory)?, &masset_token)?)?;
 
         save_withdraw_state(deps.storage, &WithdrawState {
-            is_raw: false,
             farmer_addr: position.farmer_addr,
             masset_token: position.masset_token,
             aim_collateral,
@@ -156,7 +200,7 @@ pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_coll
             collateral_price,
             masset_price,
             safe_collateral_ratio,
-        });
+        })?;
         let amount_to_withdraw = calculate_withdraw_amount(position.collateral, position.loan, aim_loan, masset_price_in_collateral_asset, safe_collateral_ratio);
         withdraw_collateral(config, position.cdp_idx, amount_to_withdraw)
     } else {
@@ -167,12 +211,12 @@ pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_coll
     }
 }
 
-pub fn raw_withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_collateral: Uint128) -> StdResult<Response> {
+pub fn raw_withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, amount: Uint128) -> StdResult<Response> {
     let masset_token = deps.api.addr_validate(&masset_token)?;
 
     if let Some(position) = may_load_position(deps.storage, &info.sender, &masset_token)? {
-        if position.collateral < aim_collateral {
-            return Err(StdError::generic_err("Invalid msg: aim_collateral is greater then current!"));
+        if position.collateral < amount {
+            return Err(StdError::generic_err("Not enough asset in collateral"));
         };
         let config = load_config(deps.storage)?;
         let mirror_mint_config = query_mirror_mint_config(deps.as_ref(), config.mirror_mint_contract.to_string())?;
@@ -184,24 +228,23 @@ pub fn raw_withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_
         let safe_collateral_ratio = decimal_multiplication(&masset_config.min_collateral_ratio, &config.min_over_collateralization);
         let loan_in_collateral_asset = position.loan * masset_price_in_collateral_asset;
         let min_safe_collateral = Uint128::from(loan_in_collateral_asset.u128() * safe_collateral_ratio.denominator() / safe_collateral_ratio.numerator());
-        if aim_collateral < min_safe_collateral {
-            return Err(StdError::generic_err("aim_collateral too low for raw withdraw"));
+        if position.collateral - amount < min_safe_collateral {
+            return Err(StdError::generic_err("Amount to withdraw too big for raw withdraw"));
         };
 
         let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &deps.api.addr_validate(&mirror_mint_config.terraswap_factory)?, &masset_token)?)?;
 
         save_withdraw_state(deps.storage, &WithdrawState {
-            is_raw: true,
             farmer_addr: position.farmer_addr,
             masset_token: position.masset_token,
-            aim_collateral,
-            aim_loan: Uint128::default(),
+            aim_collateral: Uint128::default(), // not used in raw withdraw
+            aim_loan: Uint128::default(),   //not used in raw withdraw
             pair_addr,
             collateral_price,
             masset_price,
             safe_collateral_ratio,
-        });
-        withdraw_collateral(config, position.cdp_idx, position.collateral - aim_collateral)
+        })?;
+        withdraw_collateral(config, position.cdp_idx, amount)
     } else {
         Err(StdError::generic_err(format!(
             "There isn't position: farmer_addr: {}, masset_token: {}.",

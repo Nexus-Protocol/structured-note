@@ -12,6 +12,7 @@ static KEY_CDPS: Map<&Addr, CDP> = Map::new("cdps");
 // Map<(position.farmer_addr, position.masset_token), Position>
 static KEY_POSITIONS: Map<(&Addr, &Addr), Position> = Map::new("positions");
 static KEY_IS_OPEN: Item<bool> = Item::new("is_open");
+static KEY_IS_RAW: Item<bool> = Item::new("is_raw");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
@@ -46,7 +47,6 @@ pub struct DepositState {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct WithdrawState {
-    pub is_raw: bool,
     pub farmer_addr: Addr,
     pub masset_token: Addr,
     pub aim_collateral: Uint128,
@@ -112,7 +112,7 @@ pub fn add_farmer_to_cdp(storage: &mut dyn Storage, cdp_idx: Uint128, farmer_add
             None => Ok(
                 CDP {
                     idx: cdp_idx,
-                    masset_token,
+                    masset_token: masset_token.clone(),
                     farmers: vec![farmer_addr],
                 }
             ),
@@ -173,7 +173,7 @@ pub fn load_position(storage: &dyn Storage, farmer_addr: &Addr, masset_token: &A
 }
 
 pub fn increase_position_collateral(storage: &mut dyn Storage, farmer_addr: &Addr, masset_token: &Addr, diff: Uint128) -> StdResult<Position> {
-    KEY_POSITIONS.update(storage, (farmer_addr, masset_token), |mut p: Option<Position>| -> StdResult<Position> {
+    KEY_POSITIONS.update(storage, (farmer_addr, masset_token), |p: Option<Position>| -> StdResult<Position> {
         if let Some(mut p) = p {
             p.collateral += diff;
             Ok(p)
@@ -187,7 +187,7 @@ pub fn increase_position_collateral(storage: &mut dyn Storage, farmer_addr: &Add
 }
 
 pub fn decrease_position_collateral(storage: &mut dyn Storage, farmer_addr: &Addr, masset_token: &Addr, diff: Uint128) -> StdResult<Position> {
-    KEY_POSITIONS.update(storage, (farmer_addr, masset_token), |mut p: Option<Position>| -> StdResult<Position> {
+    KEY_POSITIONS.update(storage, (farmer_addr, masset_token), |p: Option<Position>| -> StdResult<Position> {
         if let Some(mut p) = p {
             p.collateral -= diff;
             Ok(p)
@@ -201,7 +201,7 @@ pub fn decrease_position_collateral(storage: &mut dyn Storage, farmer_addr: &Add
 }
 
 pub fn increase_position_loan(storage: &mut dyn Storage, farmer_addr: &Addr, masset_token: &Addr, diff: Uint128) -> StdResult<Position> {
-    KEY_POSITIONS.update(storage, (farmer_addr, masset_token), |mut p: Option<Position>| -> StdResult<Position> {
+    KEY_POSITIONS.update(storage, (farmer_addr, masset_token), |p: Option<Position>| -> StdResult<Position> {
         if let Some(mut p) = p {
             p.loan += diff;
             Ok(p)
@@ -215,7 +215,7 @@ pub fn increase_position_loan(storage: &mut dyn Storage, farmer_addr: &Addr, mas
 }
 
 pub fn decrease_position_loan(storage: &mut dyn Storage, farmer_addr: &Addr, masset_token: &Addr, diff: Uint128) -> StdResult<Position> {
-    KEY_POSITIONS.update(storage, (farmer_addr, masset_token), |mut p: Option<Position>| -> StdResult<Position> {
+    KEY_POSITIONS.update(storage, (farmer_addr, masset_token), |p: Option<Position>| -> StdResult<Position> {
         if let Some(mut p) = p {
             p.loan -= diff;
             Ok(p)
@@ -286,4 +286,12 @@ pub fn update_is_open(storage: &mut dyn Storage, data: bool) -> StdResult<bool> 
         is_open = data;
         Ok(is_open)
     })
+}
+
+pub fn save_is_raw(storage: &mut dyn Storage, is_open: bool) -> StdResult<()> {
+    KEY_IS_RAW.save(storage, &is_open)
+}
+
+pub fn load_is_raw(storage: &dyn Storage) -> StdResult<bool> {
+    KEY_IS_RAW.load(storage)
 }

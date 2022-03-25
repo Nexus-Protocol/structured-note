@@ -6,9 +6,9 @@ use cosmwasm_std::{Binary, ContractResult, Deps, DepsMut, entry_point, Env, Frac
 use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
 use crate::anchor::redeem_stable;
-use crate::commands::{calculate_withdraw_amount, deposit, exit, is_aim_state, raw_withdraw, return_stable, withdraw};
+use crate::commands::{calculate_withdraw_amount, deposit, exit, is_aim_state, raw_deposit, raw_withdraw, return_stable, withdraw};
 use crate::mirror::{burn_masset, deposit_to_cdp, mint_masset, open_cdp, withdraw_collateral};
-use crate::state::{add_farmer_to_cdp, decrease_position_collateral, decrease_position_loan, increase_iteration_index, increase_position_collateral, increase_position_loan, load_cdp, load_config, load_deposit_state, load_is_open, load_position, load_withdraw_state, may_load_position, Position, save_position};
+use crate::state::{add_farmer_to_cdp, decrease_position_collateral, decrease_position_loan, increase_iteration_index, increase_position_collateral, increase_position_loan, load_cdp, load_config, load_deposit_state, load_is_open, load_is_raw, load_position, load_withdraw_state, may_load_position, Position, save_position};
 use crate::SubmsgIds;
 use crate::terraswap::{buy_masset, sell_masset};
 use crate::utils::{decimal_division, decimal_multiplication, get_amount_from_response_asset_as_string_attr, get_amount_from_response_raw_attr, query_balance};
@@ -36,14 +36,14 @@ pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> 
         } => {
             deposit(deps, info, masset_token, leverage, aim_collateral_ratio)
         }
-        ExecuteMsg::RawDeposit { masset_token, aim_collateral } => {
-            raw_deposit()
+        ExecuteMsg::RawDeposit { masset_token } => {
+            raw_deposit(deps, info, masset_token)
         }
         ExecuteMsg::Withdraw { masset_token, aim_collateral, aim_collateral_ratio } => {
             withdraw(deps, info, masset_token, aim_collateral, aim_collateral_ratio)
         }
-        ExecuteMsg::RawWithdraw { masset_token, aim_collateral } => {
-            raw_withdraw(deps, info, masset_token, aim_collateral)
+        ExecuteMsg::RawWithdraw { masset_token, amount } => {
+            raw_withdraw(deps, info, masset_token, amount)
         }
     }
 }
@@ -52,7 +52,7 @@ pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> 
 pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
     let events = match msg.result {
         ContractResult::Ok(result) => result.events,
-        ContractResult::Err(e) => return Err(StdError::generic_err("Fail to parse reply response")),
+        ContractResult::Err(_) => return Err(StdError::generic_err("Fail to parse reply response")),
     };
 
     let submessage_enum = SubmsgIds::try_from(msg.id)?;
@@ -70,9 +70,9 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
         }
         SubmsgIds::OpenCDP => {
             let state = increase_iteration_index(deps.storage)?;
-            let cdp_idx = Uint128::from_str(&get_amount_from_response_raw_attr(events, "position_idx".to_string())?)?;
+            let cdp_idx = Uint128::from_str(&get_amount_from_response_raw_attr(events.clone(), "position_idx".to_string())?)?;
             let minted_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events.clone(), "mint_amount".to_string())?)?;
-            let collateral_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events.clone(), "collateral_amount".to_string())?)?;
+            let collateral_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events, "collateral_amount".to_string())?)?;
             save_position(deps.storage, &Position {
                 farmer_addr: state.farmer_addr.clone(),
                 masset_token: state.masset_token.clone(),
@@ -82,7 +82,7 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
                 collateral: collateral_amount,
                 aim_collateral_ratio: state.aim_collateral_ratio,
             })?;
-            add_farmer_to_cdp(deps.storage, cdp_idx, state.farmer_addr, state.masset_token)?;
+            add_farmer_to_cdp(deps.storage, cdp_idx, state.farmer_addr.clone(), state.masset_token.clone())?;
             sell_masset(env, &state, minted_amount)
         }
         SubmsgIds::DepositToCDP => {
@@ -90,7 +90,9 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
             let state = increase_iteration_index(deps.storage)?;
             let deposit_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events, "deposit_amount".to_string())?)?;
             let position = increase_position_collateral(deps.storage, &state.farmer_addr, &state.masset_token, deposit_amount)?;
-            if state.cur_iteration_index > state.leverage {};
+            if load_is_raw(deps.storage)? || state.cur_iteration_index > state.leverage {
+                return exit(position);
+            };
             //aim_collateral_ratio = collateral_value / aim_loan_value = collateral_amount / (aim_loan_amount * asset_price_in_collateral_asset)
             // aim_loan_amount = collateral_amount/(aim_collateral_ratio * asset_price_in_collateral_asset)
             let coef = decimal_multiplication(&state.aim_collateral_ratio, &state.asset_price_in_collateral_asset);
@@ -113,7 +115,7 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
         SubmsgIds::MintMAsset => {
             let state = load_deposit_state(deps.storage)?;
             let minted_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events, "mint_amount".to_string())?)?;
-            let position = increase_position_loan(deps.storage, &state.farmer_addr, &state.masset_token, minted_amount)?;
+            increase_position_loan(deps.storage, &state.farmer_addr, &state.masset_token, minted_amount)?;
             sell_masset(env, &state, minted_amount)
         }
         SubmsgIds::Exit => {
@@ -129,7 +131,7 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
         SubmsgIds::RedeemStable => {
             let state = load_withdraw_state(deps.storage)?;
             let config = load_config(deps.storage)?;
-            if state.is_raw {
+            if load_is_raw(deps.storage)? {
                 return return_stable(deps, env);
             };
             if let Some(position) = may_load_position(deps.storage, &state.farmer_addr, &state.masset_token)? {

@@ -12,7 +12,6 @@ pub fn deposit_stable(config: Config, deposit_amount: Uint256) -> StdResult<Resp
         denom: config.stable_denom.clone(),
         amount: deposit_amount.into(),
     };
-
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.anchor_market_contract.to_string(),
