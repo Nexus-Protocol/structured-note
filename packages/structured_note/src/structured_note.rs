@@ -26,9 +26,6 @@ pub enum ExecuteMsg {
         masset_token: String,
         aim_collateral: Uint128,
     },
-    ClosePosition {
-        masset_token: String,
-    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

@@ -15,14 +15,14 @@ pub enum SubmsgIds {
     DepositStable,
     OpenCDP,
     DepositToCDP,
-    MintAsset,
+    MintMAsset,
     SellMAsset,
     Exit,
     //Withdraw
     WithdrawCollateral,
     RedeemStable,
-    BuyAsset,
-    BurnAsset,
+    BuyMAsset,
+    BurnMAsset,
 }
 
 impl TryFrom<u64> for SubmsgIds {
@@ -33,14 +33,13 @@ impl TryFrom<u64> for SubmsgIds {
             x if x == SubmsgIds::DepositStable.id() => Ok(SubmsgIds::DepositStable),
             x if x == SubmsgIds::OpenCDP.id() => Ok(SubmsgIds::OpenCDP),
             x if x == SubmsgIds::DepositToCDP.id() => Ok(SubmsgIds::DepositToCDP),
-            x if x == SubmsgIds::MintAsset.id() => Ok(SubmsgIds::MintAsset),
+            x if x == SubmsgIds::MintMAsset.id() => Ok(SubmsgIds::MintMAsset),
             x if x == SubmsgIds::SellMAsset.id() => Ok(SubmsgIds::SellMAsset),
             x if x == SubmsgIds::Exit.id() => Ok(SubmsgIds::Exit),
             x if x == SubmsgIds::WithdrawCollateral.id() => Ok(SubmsgIds::WithdrawCollateral),
             x if x == SubmsgIds::RedeemStable.id() => Ok(SubmsgIds::RedeemStable),
-            x if x == SubmsgIds::BuyAsset.id() => Ok(SubmsgIds::BuyAsset),
-            x if x == SubmsgIds::BurnAsset.id() => Ok(SubmsgIds::BurnAsset),
-
+            x if x == SubmsgIds::BuyMAsset.id() => Ok(SubmsgIds::BuyMAsset),
+            x if x == SubmsgIds::BurnMAsset.id() => Ok(SubmsgIds::BurnMAsset),
             unknown => Err(StdError::generic_err(format!(
                 "unknown reply message id: {}",
                 unknown
@@ -52,16 +51,16 @@ impl TryFrom<u64> for SubmsgIds {
 impl SubmsgIds {
     pub const fn id(&self) -> u64 {
         match self {
-            SubmsgIds::OpenCDP => 0,
-            SubmsgIds::DepositToCDP => 1,
-            SubmsgIds::MintAsset => 2,
-            SubmsgIds::SellMAsset => 3,
-            SubmsgIds::DepositOnReply => 4,
+            SubmsgIds::DepositStable => 0,
+            SubmsgIds::OpenCDP => 1,
+            SubmsgIds::DepositToCDP => 2,
+            SubmsgIds::MintMAsset => 3,
+            SubmsgIds::SellMAsset => 4,
             SubmsgIds::Exit => 5,
             SubmsgIds::WithdrawCollateral => 6,
             SubmsgIds::RedeemStable => 7,
-            SubmsgIds::BuyAsset => 8,
-            SubmsgIds::BurnAsset => 9,
+            SubmsgIds::BuyMAsset => 8,
+            SubmsgIds::BurnMAsset => 9,
         }
     }
 }

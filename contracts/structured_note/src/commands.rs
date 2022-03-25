@@ -1,12 +1,11 @@
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{BalanceResponse, BankQuery, Decimal, Deps, DepsMut, Env, Fraction, MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128, WasmMsg};
-use cw20::Cw20ExecuteMsg;
+use cosmwasm_std::{BalanceResponse, BankMsg, BankQuery, Coin, CosmosMsg, Decimal, DepsMut, Env, Fraction, MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128};
 
 use structured_note_package::mirror::MirrorAssetConfigResponse;
 
 use crate::anchor::deposit_stable as anc_deposit_stable;
 use crate::mirror::{get_assets_prices, query_masset_config, query_mirror_mint_config, withdraw_collateral};
-use crate::state::{add_farmer_to_cdp, decrease_position_collateral, DepositState, load_config, may_load_cdp, may_load_position, Position, remove_farmer_from_cdp, remove_position, save_deposit_state, save_is_closure, save_is_open, save_position, save_withdraw_state, update_is_open, WithdrawState, WithdrawType};
+use crate::state::{add_farmer_to_cdp, DepositState, load_config, load_position, load_withdraw_state, may_load_cdp, may_load_position, Position, remove_farmer_from_cdp, remove_position, save_deposit_state, save_is_open, save_position, save_withdraw_state, update_is_open, WithdrawState};
 use crate::terraswap::query_pair_addr;
 use crate::utils::{decimal_division, decimal_multiplication};
 
@@ -75,7 +74,7 @@ pub fn deposit(
             })?;
         } else {
             return Err(StdError::generic_err(format!(
-                "There isn't position: farmer_addr: {}, masset_token: {}.",
+                "There isn't position: farmer_addr: {}, masset_token: {}. To create new position provide 'leverage'",
                 &info.sender.to_string(),
                 &masset_token.to_string())));
         }
@@ -95,13 +94,6 @@ pub fn deposit(
         }
     }
     anc_deposit_stable(config, deposit_amount)
-}
-
-pub fn deposit_stable_on_reply(
-    deps: DepsMut,
-    deposit_amount: Uint256,
-) -> StdResult<Response> {
-    anc_deposit_stable(load_config(deps.storage)?, deposit_amount)
 }
 
 pub fn validate_masset(masset_config: &MirrorAssetConfigResponse) -> StdResult<Response> {
@@ -182,13 +174,17 @@ pub fn raw_withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_
         if position.collateral < aim_collateral {
             return Err(StdError::generic_err("Invalid msg: aim_collateral is greater then current!"));
         };
-
         let config = load_config(deps.storage)?;
+        let mirror_mint_config = query_mirror_mint_config(deps.as_ref(), config.mirror_mint_contract.to_string())?;
+
+        let (collateral_price, masset_price) = get_assets_prices(deps.as_ref(), &mirror_mint_config, &config, &masset_token)?;
+        let masset_price_in_collateral_asset = decimal_division(collateral_price, masset_price)?;
+
         let masset_config = query_masset_config(deps.as_ref(), &masset_token)?;
         let safe_collateral_ratio = decimal_multiplication(&masset_config.min_collateral_ratio, &config.min_over_collateralization);
-        let loan_in_collateral_asset = loan * masset_price_in_collateral_asset;
+        let loan_in_collateral_asset = position.loan * masset_price_in_collateral_asset;
         let min_safe_collateral = Uint128::from(loan_in_collateral_asset.u128() * safe_collateral_ratio.denominator() / safe_collateral_ratio.numerator());
-        if aim_collateral > min_safe_collateral {
+        if aim_collateral < min_safe_collateral {
             return Err(StdError::generic_err("aim_collateral too low for raw withdraw"));
         };
 
@@ -223,35 +219,35 @@ pub fn calculate_withdraw_amount(collateral: Uint128, loan: Uint128, aim_collate
     let min_safe_collateral = Uint128::from(loan_in_collateral_asset.u128() * safe_collateral_ratio.denominator() / safe_collateral_ratio.numerator());
     let max_safe_withdraw = collateral - min_safe_collateral;
     if aim_collateral < min_safe_collateral {
-        position.collateral - aim_collateral
+        collateral - aim_collateral
     } else {
         max_safe_withdraw
     }
 }
 
 pub fn return_stable(deps: DepsMut, env: Env) -> StdResult<Response> {
-    if let Some(position) = may_load_position(deps.storage, farmer_addr, masset)? {
-        let config = load_config(deps.storage)?;
-        if position.collateral == Uint128::zero() {
-            remove_position(deps.storage, &position.farmer_addr, &position.masset_token);
-        };
-        let balance: BalanceResponse = querier.query(&QueryRequest::Bank(BankQuery::Balance {
-            address: env.contract.address.to_string(),
-            denom: config.stable_denom,
-        }))?;
-        Ok(Response::new()
-            .add_message(Cw20ExecuteMsg::Transfer {
-                recipient: position.farmer_addr.to_string(),
-                amount: balance.amount.amount,
-            })
-            .add_attributes(vec![
-                ("action", "return_stable"),
-                ("return_amount", &balance.amount.amount.to_string()),
-            ]))
-    } else {
-        return Err(StdError::generic_err(format!(
-            "There isn't position: farmer_addr: {}, masset_token: {}.",
-            &info.sender.to_string(),
-            &masset_token.to_string())));
-    }
+    let state = load_withdraw_state(deps.storage)?;
+    let position = load_position(deps.storage, &state.farmer_addr, &state.masset_token)?;
+    let config = load_config(deps.storage)?;
+    if position.collateral == Uint128::zero() {
+        remove_position(deps.storage, &position.farmer_addr, &position.masset_token);
+        remove_farmer_from_cdp(deps.storage, &position.farmer_addr, &position.masset_token)?;
+    };
+    let balance: BalanceResponse = deps.querier.query(&QueryRequest::Bank(BankQuery::Balance {
+        address: env.contract.address.to_string(),
+        denom: config.stable_denom.clone(),
+    }))?;
+    Ok(Response::new()
+        .add_message(CosmosMsg::Bank(BankMsg::Send {
+            to_address: position.farmer_addr.to_string(),
+            amount: vec![
+                Coin {
+                    denom: config.stable_denom,
+                    amount: balance.amount.amount,
+                }],
+        }))
+        .add_attributes(vec![
+            ("action", "return_stable"),
+            ("return_amount", &balance.amount.amount.to_string()),
+        ]))
 }

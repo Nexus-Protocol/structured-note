@@ -1,4 +1,4 @@
-use cosmwasm_std::{Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut, QueryRequest, Response, StdError, StdResult, SubMsg, to_binary, Uint128, WasmMsg, WasmQuery};
+use cosmwasm_std::{Addr, Binary, CosmosMsg, Decimal, Deps, QueryRequest, Response, StdError, StdResult, SubMsg, to_binary, Uint128, WasmMsg, WasmQuery};
 use cosmwasm_storage::to_length_prefixed;
 use cw20::Cw20ExecuteMsg;
 use terraswap::asset::{Asset, AssetInfo};
@@ -6,8 +6,7 @@ use terraswap::asset::{Asset, AssetInfo};
 use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorCollateralOracleQueryMsg, MirrorCollateralPriceResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg, MirrorOracleQueryMsg, MirrorPriceResponse};
 
 use crate::{concat, SubmsgIds};
-use crate::state::{Config, DepositState, increase_iteration_index, increase_position_collateral, load_config, WithdrawState, WithdrawType};
-use crate::utils::decimal_division;
+use crate::state::{Config, DepositState, load_config, WithdrawState};
 
 pub fn query_mirror_mint_config(deps: Deps, mirror_mint_contract: String) -> StdResult<MirrorMintConfigResponse> {
     let mirror_mint_config: MirrorMintConfigResponse =
@@ -141,12 +140,11 @@ pub fn deposit_to_cdp(config: Config, cdp_idx: Uint128, received_aterra_amount: 
         ))
         .add_attributes(vec![
             ("action", "deposit_to_cdp"),
-            ("collateral_amount", &received_aterra_amount.to_string()),
-            ("masset_token", &state.masset_token.to_string()),
+            ("deposit_amount", &received_aterra_amount.to_string()),
         ]))
 }
 
-pub fn mint_asset(config: Config, cdp_idx: Uint128, masset_token: String, amount_to_mint: Uint128) -> StdResult<Response> {
+pub fn mint_masset(config: Config, cdp_idx: Uint128, masset_token: String, amount_to_mint: Uint128) -> StdResult<Response> {
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.mirror_mint_contract.to_string(),
@@ -159,10 +157,10 @@ pub fn mint_asset(config: Config, cdp_idx: Uint128, masset_token: String, amount
                 short_params: None,
             })?,
             funds: vec![],
-        }), SubmsgIds::MintAsset.id(),
+        }), SubmsgIds::MintMAsset.id(),
         ))
         .add_attributes(vec![
-            ("action", "mint_asset"),
+            ("action", "mint_masset"),
             ("masset_token", &masset_token.to_string()),
             ("mint_amount", &amount_to_mint.to_string()),
         ]))
@@ -188,7 +186,7 @@ pub fn withdraw_collateral(config: Config, cdp_idx: Uint128, amount_to_withdraw:
     ]))
 }
 
-pub fn burn_asset(config: Config, state: WithdrawState, cdp_idx: Uint128, return_amount: Uint128) -> StdResult<Response> {
+pub fn burn_masset(config: Config, state: WithdrawState, cdp_idx: Uint128, return_amount: Uint128) -> StdResult<Response> {
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(
             CosmosMsg::Wasm(WasmMsg::Execute {
@@ -202,10 +200,10 @@ pub fn burn_asset(config: Config, state: WithdrawState, cdp_idx: Uint128, return
                 })?,
                 funds: vec![],
             }),
-            SubmsgIds::BurnAsset.id(),
+            SubmsgIds::BurnMAsset.id(),
         ))
         .add_attributes(vec![
-            ("action", "burn_asset"),
+            ("action", "burn_masset"),
             ("cdp_idx", &cdp_idx.to_string()),
             ("amount", &return_amount.to_string()),
         ]))

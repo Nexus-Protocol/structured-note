@@ -44,13 +44,13 @@ pub fn sell_masset(env: Env, state: &DepositState, minted_amount: Uint128) -> St
             SubmsgIds::SellMAsset.id(),
         ))
         .add_attributes(vec![
-            ("action", "sell_asset"),
+            ("action", "sell_masset"),
             ("masset_token", &state.masset_token.to_string()),
             ("amount_to_sell", &minted_amount.to_string()),
         ]))
 }
 
-pub fn buy_asset(config: Config, state: WithdrawState, contract_addr: String, offer_amount: Uint128) -> StdResult<Response> {
+pub fn buy_masset(config: Config, state: WithdrawState, contract_addr: String, offer_amount: Uint128) -> StdResult<Response> {
     let offer_asset = Coin {
         denom: config.stable_denom.clone(),
         amount: offer_amount,
@@ -63,16 +63,16 @@ pub fn buy_asset(config: Config, state: WithdrawState, contract_addr: String, of
                     info: AssetInfo::NativeToken {
                         denom: config.stable_denom,
                     },
-                    amount: stable_amount,
+                    amount: offer_amount,
                 },
                 belief_price: None,
                 max_spread: None,
                 to: Some(contract_addr),
             })?,
             funds: vec![offer_asset],
-        }), SubmsgIds::BuyAsset.id()))
+        }), SubmsgIds::BuyMAsset.id()))
         .add_attributes(vec![
-            ("action", "buy_asset"),
-            ("offered_amount", &stable_amount.to_string()),
+            ("action", "buy_masset"),
+            ("offered_amount", &offer_amount.to_string()),
         ]))
 }

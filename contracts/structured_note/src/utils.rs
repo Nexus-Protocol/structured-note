@@ -20,18 +20,6 @@ pub fn reverse_decimal(decimal: Decimal) -> Decimal {
 }
 
 //Paring
-pub fn get_action_name(events: Vec<Event>) -> StdResult<String> {
-    events
-        .into_iter()
-        .map(|event| event.attributes)
-        .flatten()
-        .find(|attr| attr.key == "action")
-        .map(|attr| attr.value)
-        .ok_or_else(|| {
-            StdError::generic_err("Fail to read action name")
-        })
-}
-
 pub fn get_amount_from_response_raw_attr(events: Vec<Event>, raw_attr_name: String) -> StdResult<String> {
     events
         .into_iter()

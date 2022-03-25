@@ -4,7 +4,7 @@ use cw20::Cw20ExecuteMsg;
 
 use structured_note_package::anchor::{AnchorCW20HookMsg, AnchorMarketMsg};
 
-use crate::state::{Config, WithdrawType};
+use crate::state::Config;
 use crate::SubmsgIds;
 
 pub fn deposit_stable(config: Config, deposit_amount: Uint256) -> StdResult<Response> {

@@ -4,8 +4,6 @@ use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use structured_note_package::structured_note::WithdrawType;
-
 static KEY_CONFIG: Item<Config> = Item::new("config");
 static KEY_DEPOSIT_STATE: Item<DepositState> = Item::new("deposit_state");
 static KEY_WITHDRAW_STATE: Item<WithdrawState> = Item::new("withdraw_state");
