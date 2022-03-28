@@ -1,4 +1,3 @@
-use cosmwasm_bignumber::Decimal256;
 use cosmwasm_std::{Addr, Decimal, Order, StdError, StdResult, Storage, Uint128};
 use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
@@ -22,7 +21,7 @@ pub struct Config {
     pub anchor_market_contract: Addr,
     pub aterra_addr: Addr,
     pub nexus_treasury: Addr,
-    pub protocol_fee: Decimal256,
+    pub protocol_fee: Decimal,
     pub min_over_collateralization: Decimal,
 }
 

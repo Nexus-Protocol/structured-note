@@ -8,19 +8,29 @@ use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, Query
 use crate::anchor::redeem_stable;
 use crate::commands::{calculate_withdraw_amount, deposit, exit, is_aim_state, raw_deposit, raw_withdraw, return_stable, withdraw};
 use crate::mirror::{burn_masset, deposit_to_cdp, mint_masset, open_cdp, withdraw_collateral};
-use crate::state::{add_farmer_to_cdp, decrease_position_collateral, decrease_position_loan, increase_iteration_index, increase_position_collateral, increase_position_loan, load_cdp, load_config, load_deposit_state, load_is_open, load_is_raw, load_position, load_withdraw_state, may_load_position, Position, save_position};
+use crate::state::{add_farmer_to_cdp, Config, decrease_position_collateral, decrease_position_loan, increase_iteration_index, increase_position_collateral, increase_position_loan, load_cdp, load_config, load_deposit_state, load_is_open, load_is_raw, load_position, load_withdraw_state, may_load_position, Position, save_config, save_position};
 use crate::SubmsgIds;
 use crate::terraswap::{buy_masset, sell_masset};
 use crate::utils::{decimal_division, decimal_multiplication, get_amount_from_response_asset_as_string_attr, get_amount_from_response_raw_attr, query_balance};
 
 #[entry_point]
 pub fn instantiate(
-    _deps: DepsMut,
+    deps: DepsMut,
     _env: Env,
     _info: MessageInfo,
-    _msg: InstantiateMsg,
+    msg: InstantiateMsg,
 ) -> StdResult<Response> {
-    unimplemented!()
+    save_config(deps.storage, &Config {
+        stable_denom: msg.stable_denom,
+        governance_contract: deps.api.addr_validate(&msg.governance_contract)?,
+        mirror_mint_contract: deps.api.addr_validate(&msg.mirror_mint_contract)?,
+        anchor_market_contract: deps.api.addr_validate(&msg.anchor_market_contract)?,
+        aterra_addr: deps.api.addr_validate(&msg.aterra_addr)?,
+        nexus_treasury: deps.api.addr_validate(&msg.nexus_treasury)?,
+        protocol_fee: msg.protocol_fee,
+        min_over_collateralization: msg.min_over_collateralization,
+    })?;
+    Ok(Response::default())
 }
 
 //TODO: v.0.2 check liquidity
@@ -174,9 +184,13 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
 }
 
 #[entry_point]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&load_config(deps.storage)?),
-        QueryMsg::Position { .. } => { unimplemented!() }
+        QueryMsg::Position { masset_token } => {
+            let masset_token = deps.api.addr_validate(&masset_token)?;
+            let position = load_position(deps.storage, &env.contract.address, &masset_token)?;
+            Ok(to_binary(&position)?)
+        }
     }
 }

@@ -3,7 +3,16 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct InstantiateMsg {}
+pub struct InstantiateMsg {
+    pub stable_denom: String,
+    pub governance_contract: String,
+    pub mirror_mint_contract: String,
+    pub anchor_market_contract: String,
+    pub aterra_addr: String,
+    pub nexus_treasury: String,
+    pub protocol_fee: Decimal,
+    pub min_over_collateralization: Decimal,
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
