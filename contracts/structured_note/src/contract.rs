@@ -8,7 +8,7 @@ use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, Query
 use crate::anchor::redeem_stable;
 use crate::commands::{calculate_withdraw_amount, deposit, exit, is_aim_state, raw_deposit, raw_withdraw, return_stable, withdraw};
 use crate::mirror::{burn_masset, deposit_to_cdp, mint_masset, open_cdp, withdraw_collateral};
-use crate::state::{add_farmer_to_cdp, Config, decrease_position_collateral, decrease_position_loan, increase_iteration_index, increase_position_collateral, increase_position_loan, load_cdp, load_config, load_deposit_state, load_is_open, load_is_raw, load_position, load_withdraw_state, may_load_position, Position, save_config, save_position};
+use crate::state::{add_farmer_to_cdp, Config, decrease_position_collateral, decrease_position_loan, increase_iteration_index, increase_position_collateral, increase_position_loan, load_cdp, load_config, load_deposit_state, load_is_open, load_is_raw, load_position, load_positions_by_farmer_addr, load_withdraw_state, may_load_position, Position, save_config, save_position};
 use crate::SubmsgIds;
 use crate::terraswap::{buy_masset, sell_masset};
 use crate::utils::{decimal_division, decimal_multiplication, get_amount_from_response_asset_as_string_attr, get_amount_from_response_raw_attr, query_balance};
@@ -32,7 +32,7 @@ pub fn instantiate(
     })?;
     Ok(Response::default())
 }
-
+//TODO: v.0.2 check working hours
 //TODO: v.0.2 check liquidity
 //TODO: v.0.2 check slippage
 //TODO: v.0.2 avoid send zero tokens issue: check deposit is enough to -> mint enough aterra to -> borrow enough masset to -> buy enough UST -> etc
@@ -189,8 +189,14 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::Config {} => to_binary(&load_config(deps.storage)?),
         QueryMsg::Position { masset_token } => {
             let masset_token = deps.api.addr_validate(&masset_token)?;
-            let position = load_position(deps.storage, &env.contract.address, &masset_token)?;
-            Ok(to_binary(&position)?)
-        }
+            match may_load_position(deps.storage, &env.contract.address, &masset_token)?{
+                Some(position) => to_binary(&position),
+                None => Err(StdError::generic_err("There is no position")),
+            }
+        },
+        QueryMsg::FarmersPositions {farmer_addr } => {
+            let farmer_addr = deps.api.addr_validate(&farmer_addr)?;
+            to_binary(&load_positions_by_farmer_addr(deps.storage, &farmer_addr)?)
+        },
     }
 }

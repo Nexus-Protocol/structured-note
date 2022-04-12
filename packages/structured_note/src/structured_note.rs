@@ -42,5 +42,8 @@ pub enum QueryMsg {
     Config {},
     Position {
         masset_token: String,
-    }
+    },
+    FarmersPositions {
+        farmer_addr: String,
+    },
 }
