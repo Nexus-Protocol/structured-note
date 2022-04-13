@@ -1,1 +1,1 @@
-ca6ef204b8e106044e46749acb3f1f99b0c3d8cc0c273d414cadd031176b5e96  structured_note.wasm
+b5ff28f68781c08b9e15eb059ea5b13bff9e3f3ab7ccf5b9c7a9ce94fd3964d8  structured_note.wasm

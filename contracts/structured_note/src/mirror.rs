@@ -12,7 +12,7 @@ pub fn query_mirror_mint_config(deps: Deps, mirror_mint_contract: String) -> Std
     let mirror_mint_config: MirrorMintConfigResponse =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Raw {
             contract_addr: mirror_mint_contract,
-            key: Binary::from(b"config"),
+            key: Binary::from(to_length_prefixed(b"config").to_vec()),
         }))?;
     Ok(mirror_mint_config)
 }
