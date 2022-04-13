@@ -20,12 +20,14 @@ pub fn query_mirror_mint_config(deps: Deps, mirror_mint_contract: String) -> Std
 pub fn query_masset_config(deps: Deps, masset_token: &Addr) -> StdResult<MirrorAssetConfigResponse> {
     let config = load_config(deps.storage)?;
 
+    let masset_token = deps.api.addr_canonicalize(&masset_token.to_string())?;
+
     let masset_config: StdResult<MirrorAssetConfigResponse> =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Raw {
             contract_addr: config.mirror_mint_contract.to_string(),
             key: Binary::from(concat(
                 &to_length_prefixed(b"asset_config"),
-                masset_token.as_bytes(),
+                masset_token.as_slice(),
             )),
         }));
 
