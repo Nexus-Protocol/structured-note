@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use cosmwasm_bignumber::Uint256;
 use cosmwasm_std::{attr, BalanceResponse, BankMsg, BankQuery, Coin, CosmosMsg, Decimal, DepsMut, Env, Fraction, MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128};
 
@@ -30,7 +31,7 @@ pub fn deposit(
     let (collateral_price, asset_price) = get_assets_prices(deps.as_ref(), &mirror_mint_config, &config, &masset_token)?;
     let asset_price_in_collateral_asset = decimal_division(collateral_price, asset_price)?;
 
-    let min_collateral_ratio = decimal_multiplication(&masset_config.min_collateral_ratio, &config.min_over_collateralization);
+    let min_collateral_ratio = decimal_multiplication(&masset_config.min_collateral_ratio, &(Decimal::one() + config.min_over_collateralization));
     if aim_collateral_ratio < min_collateral_ratio {
         return Err(StdError::generic_err("Aim collateral ratio too low"));
     };
