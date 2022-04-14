@@ -4,6 +4,7 @@ use cw20::Cw20ExecuteMsg;
 use terraswap::asset::{Asset, AssetInfo};
 
 use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorCollateralOracleQueryMsg, MirrorCollateralPriceResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg, MirrorOracleQueryMsg, MirrorPriceResponse};
+use structured_note_package::tefi_oracle::HubQueryMsg;
 
 use crate::{concat, SubmsgIds};
 use crate::state::{Config, DepositState, load_config, WithdrawState};
@@ -75,23 +76,23 @@ pub fn query_collateral_price(deps: Deps, collateral_oracle_addr: &Addr, aterra_
     Ok(res.rate)
 }
 
-pub fn query_asset_price(deps: Deps, oracle_addr: &Addr, asset_addr: &Addr, base_asset: String) -> StdResult<Decimal> {
+pub fn query_asset_price(deps: Deps, oracle_addr: &Addr, asset_addr: &Addr) -> StdResult<Decimal> {
     let res: MirrorPriceResponse = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
         contract_addr: oracle_addr.to_string(),
-        msg: to_binary(&MirrorOracleQueryMsg::Price {
-            base_asset,
-            quote_asset: asset_addr.to_string(),
+        msg: to_binary(&HubQueryMsg::Price {
+            asset_token: asset_addr.to_string(),
+            timeframe: None
         })?,
     }))?;
     Ok(res.rate)
 }
 
 pub fn get_assets_prices(deps: Deps, mirror_mint_config: &MirrorMintConfigResponse, config: &Config, masset_token: &Addr) -> StdResult<(Decimal, Decimal)> {
-    let collateral_oracle = deps.api.addr_validate(&mirror_mint_config.collateral_oracle)?;
+    let collateral_oracle = deps.api.addr_humanize(&mirror_mint_config.collateral_oracle)?;
     let collateral_price = query_collateral_price(deps, &collateral_oracle, &config.aterra_addr)?;
 
-    let oracle_addr = deps.api.addr_validate(&mirror_mint_config.oracle)?;
-    let masset_price = query_asset_price(deps, &oracle_addr, masset_token, config.stable_denom.clone())?;
+    let oracle_addr = deps.api.addr_humanize(&mirror_mint_config.oracle)?;
+    let masset_price = query_asset_price(deps, &oracle_addr, masset_token)?;
 
     Ok((collateral_price, masset_price))
 }

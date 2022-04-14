@@ -1,5 +1,5 @@
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{BalanceResponse, BankMsg, BankQuery, Coin, CosmosMsg, Decimal, DepsMut, Env, Fraction, MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128};
+use cosmwasm_std::{attr, BalanceResponse, BankMsg, BankQuery, Coin, CosmosMsg, Decimal, DepsMut, Env, Fraction, MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128};
 
 use structured_note_package::mirror::MirrorAssetConfigResponse;
 
@@ -25,7 +25,7 @@ pub fn deposit(
     let masset_token = deps.api.addr_validate(&masset_token)?;
     let masset_config = query_masset_config(deps.as_ref(), &masset_token)?;
 
-    let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &deps.api.addr_validate(&mirror_mint_config.terraswap_factory)?, &masset_token)?)?;
+    let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &deps.api.addr_humanize(&mirror_mint_config.terraswap_factory)?, &masset_token)?)?;
 
     let (collateral_price, asset_price) = get_assets_prices(deps.as_ref(), &mirror_mint_config, &config, &masset_token)?;
     let asset_price_in_collateral_asset = decimal_division(collateral_price, asset_price)?;
@@ -189,7 +189,7 @@ pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_coll
         let aim_loan_in_collateral_asset = Uint128::from(aim_collateral.u128() * aim_collateral_ratio.denominator() / aim_collateral_ratio.numerator());
         let aim_loan = Uint128::from(aim_loan_in_collateral_asset.u128() * masset_price_in_collateral_asset.denominator() / masset_price_in_collateral_asset.numerator());
 
-        let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &deps.api.addr_validate(&mirror_mint_config.terraswap_factory)?, &masset_token)?)?;
+        let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &deps.api.addr_humanize(&mirror_mint_config.terraswap_factory)?, &masset_token)?)?;
 
         save_withdraw_state(deps.storage, &WithdrawState {
             farmer_addr: position.farmer_addr,
@@ -232,7 +232,7 @@ pub fn raw_withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, amou
             return Err(StdError::generic_err("Amount to withdraw too big for raw withdraw"));
         };
 
-        let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &deps.api.addr_validate(&mirror_mint_config.terraswap_factory)?, &masset_token)?)?;
+        let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &deps.api.addr_humanize(&mirror_mint_config.terraswap_factory)?, &masset_token)?)?;
 
         save_withdraw_state(deps.storage, &WithdrawState {
             farmer_addr: position.farmer_addr,

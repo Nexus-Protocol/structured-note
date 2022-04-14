@@ -1,4 +1,4 @@
-use cosmwasm_std::{Addr, Decimal, Uint128};
+use cosmwasm_std::{Addr, CanonicalAddr, Decimal, Uint128};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use terraswap::asset::{Asset, AssetInfo, AssetRaw};
@@ -30,14 +30,20 @@ pub enum MirrorMintCW20HookMsg {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MirrorMintQueryMsg {
+    Config {}
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct MirrorMintConfigResponse {
-    pub owner: String,
-    pub oracle: String,
-    pub collector: String,
-    pub collateral_oracle: String,
-    pub staking: String,
-    pub terraswap_factory: String,
-    pub lock: String,
+    pub owner: CanonicalAddr,
+    pub oracle: CanonicalAddr,
+    pub collector: CanonicalAddr,
+    pub collateral_oracle: CanonicalAddr,
+    pub staking: CanonicalAddr,
+    pub terraswap_factory: CanonicalAddr,
+    pub lock: CanonicalAddr,
     pub base_denom: String,
     pub token_code_id: u64,
     pub protocol_fee_rate: Decimal,
@@ -102,6 +108,5 @@ pub enum MirrorOracleQueryMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct MirrorPriceResponse {
     pub rate: Decimal,
-    pub last_updated_base: u64,
-    pub last_updated_quote: u64,
+    pub last_updated: u64,
 }
