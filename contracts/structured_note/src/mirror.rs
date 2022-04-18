@@ -3,19 +3,24 @@ use cosmwasm_storage::to_length_prefixed;
 use cw20::Cw20ExecuteMsg;
 use terraswap::asset::{Asset, AssetInfo};
 
-use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorCollateralOracleQueryMsg, MirrorCollateralPriceResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg, MirrorOracleQueryMsg, MirrorPriceResponse};
+use structured_note_package::mirror::{CDPState, MirrorAssetConfigResponse, MirrorCDPResponse, MirrorCollateralOracleQueryMsg, MirrorCollateralPriceResponse, MirrorMintConfigResponse, MirrorMintCW20HookMsg, MirrorMintExecuteMsg, MirrorMintInfo, MirrorPriceResponse};
 use structured_note_package::tefi_oracle::HubQueryMsg;
 
 use crate::{concat, SubmsgIds};
 use crate::state::{Config, DepositState, load_config, WithdrawState};
 
-pub fn query_mirror_mint_config(deps: Deps, mirror_mint_contract: String) -> StdResult<MirrorMintConfigResponse> {
-    let mirror_mint_config: MirrorMintConfigResponse =
+pub fn query_mirror_mint_info(deps: Deps, mirror_mint_contract: String) -> StdResult<MirrorMintInfo> {
+    let res: MirrorMintConfigResponse =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Raw {
             contract_addr: mirror_mint_contract,
             key: Binary::from(to_length_prefixed(b"config").to_vec()),
         }))?;
-    Ok(mirror_mint_config)
+    Ok(
+        MirrorMintInfo{
+                oracle: deps.api.addr_humanize(&res.oracle)?,
+                collateral_oracle: deps.api.addr_humanize(&res.collateral_oracle)?,
+                terraswap_factory: deps.api.addr_humanize(&res. terraswap_factory)?,
+            })
 }
 
 pub fn query_masset_config(deps: Deps, masset_token: &Addr) -> StdResult<MirrorAssetConfigResponse> {
@@ -87,12 +92,9 @@ pub fn query_asset_price(deps: Deps, oracle_addr: &Addr, asset_addr: &Addr) -> S
     Ok(res.rate)
 }
 
-pub fn get_assets_prices(deps: Deps, mirror_mint_config: &MirrorMintConfigResponse, config: &Config, masset_token: &Addr) -> StdResult<(Decimal, Decimal)> {
-    let collateral_oracle = deps.api.addr_humanize(&mirror_mint_config.collateral_oracle)?;
-    let collateral_price = query_collateral_price(deps, &collateral_oracle, &config.aterra_addr)?;
-
-    let oracle_addr = deps.api.addr_humanize(&mirror_mint_config.oracle)?;
-    let masset_price = query_asset_price(deps, &oracle_addr, masset_token)?;
+pub fn get_assets_prices(deps: Deps, mirror_mint_info: &MirrorMintInfo, config: &Config, masset_token: &Addr) -> StdResult<(Decimal, Decimal)> {
+    let collateral_price = query_collateral_price(deps, &mirror_mint_info.collateral_oracle, &config.aterra_addr)?;
+    let masset_price = query_asset_price(deps, &mirror_mint_info.oracle, masset_token)?;
 
     Ok((collateral_price, masset_price))
 }

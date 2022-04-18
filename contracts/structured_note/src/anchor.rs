@@ -1,5 +1,4 @@
-use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{Coin, CosmosMsg, Response, StdResult, SubMsg, to_binary, Uint128, WasmMsg};
+use cosmwasm_std::{Addr, Coin, CosmosMsg, Response, StdResult, SubMsg, to_binary, Uint128, WasmMsg};
 use cw20::Cw20ExecuteMsg;
 
 use structured_note_package::anchor::{AnchorCW20HookMsg, AnchorMarketMsg};
@@ -7,21 +6,17 @@ use structured_note_package::anchor::{AnchorCW20HookMsg, AnchorMarketMsg};
 use crate::state::Config;
 use crate::SubmsgIds;
 
-pub fn deposit_stable(config: Config, deposit_amount: Uint256) -> StdResult<Response> {
-    let deposit_coin = Coin {
-        denom: config.stable_denom.clone(),
-        amount: deposit_amount.into(),
-    };
+pub fn deposit_stable(anchor_market_contract: Addr, coin : Coin) -> StdResult<Response> {
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.anchor_market_contract.to_string(),
+            contract_addr: anchor_market_contract.to_string(),
             msg: to_binary(&AnchorMarketMsg::DepositStable {})?,
-            funds: vec![deposit_coin],
+            funds: vec![coin.clone()],
         }), SubmsgIds::DepositStable.id(),
         ))
         .add_attributes(vec![
             ("action", "deposit_stable_to_anchor_market"),
-            ("amount", &deposit_amount.to_string()),
+            ("amount", &coin.amount.to_string()),
         ]))
 }
 

@@ -50,6 +50,20 @@ pub struct MirrorMintConfigResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct MirrorMintInfo {
+    // pub owner: Addr,
+    pub oracle: Addr,
+    // pub collector: Addr,
+    pub collateral_oracle: Addr,
+    // pub staking: Addr,
+    pub terraswap_factory: Addr,
+    // pub lock: Addr,
+    // pub base_denom: String,
+    // pub token_code_id: u64,
+    // pub protocol_fee_rate: Decimal,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct MirrorAssetConfigResponse {
     pub token: String,
     pub auction_discount: Decimal,

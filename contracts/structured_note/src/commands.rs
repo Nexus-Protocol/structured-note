@@ -1,14 +1,13 @@
-use std::str::FromStr;
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{attr, BalanceResponse, BankMsg, BankQuery, Coin, CosmosMsg, Decimal, DepsMut, Env, Fraction, MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128};
+use cosmwasm_std::{BalanceResponse, BankMsg, BankQuery, Coin, CosmosMsg, Decimal, DepsMut, Env, Fraction, MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128};
 
 use structured_note_package::mirror::MirrorAssetConfigResponse;
 
 use crate::anchor::deposit_stable as anc_deposit_stable;
-use crate::mirror::{get_assets_prices, query_masset_config, query_mirror_mint_config, withdraw_collateral};
+use crate::mirror::{get_assets_prices, query_masset_config, query_mirror_mint_info, withdraw_collateral};
 use crate::state::{add_farmer_to_cdp, DepositState, load_config, load_position, load_withdraw_state, may_load_cdp, may_load_position, Position, remove_farmer_from_cdp, remove_position, save_deposit_state, save_is_open, save_is_raw, save_position, save_withdraw_state, update_is_open, WithdrawState};
 use crate::terraswap::query_pair_addr;
-use crate::utils::{decimal_division, decimal_multiplication};
+use crate::utils::{decimal_division, decimal_multiplication, deduct_tax};
 
 pub fn deposit(
     deps: DepsMut,
@@ -21,14 +20,14 @@ pub fn deposit(
     save_is_open(deps.storage, false)?;
     let config = load_config(deps.storage)?;
 
-    let mirror_mint_config = query_mirror_mint_config(deps.as_ref(), config.mirror_mint_contract.to_string())?;
+    let mirror_mint_info = query_mirror_mint_info(deps.as_ref(), config.mirror_mint_contract.to_string())?;
 
     let masset_token = deps.api.addr_validate(&masset_token)?;
     let masset_config = query_masset_config(deps.as_ref(), &masset_token)?;
 
-    let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &deps.api.addr_humanize(&mirror_mint_config.terraswap_factory)?, &masset_token)?)?;
+    let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &mirror_mint_info.terraswap_factory, &masset_token)?)?;
 
-    let (collateral_price, asset_price) = get_assets_prices(deps.as_ref(), &mirror_mint_config, &config, &masset_token)?;
+    let (collateral_price, asset_price) = get_assets_prices(deps.as_ref(), &mirror_mint_info, &config, &masset_token)?;
     let asset_price_in_collateral_asset = decimal_division(collateral_price, asset_price)?;
 
     let min_collateral_ratio = decimal_multiplication(&masset_config.min_collateral_ratio, &(Decimal::one() + config.min_over_collateralization));
@@ -95,7 +94,13 @@ pub fn deposit(
             update_is_open(deps.storage, true)?;
         }
     }
-    anc_deposit_stable(config, deposit_amount)
+
+    let deposited_coin_without_taxes = deduct_tax(deps.as_ref(), Coin {
+        denom: config.stable_denom.clone(),
+        amount: deposit_amount.into(),
+    })?;
+
+    anc_deposit_stable(config.anchor_market_contract,deposited_coin_without_taxes)
 }
 
 pub fn raw_deposit(
@@ -133,7 +138,13 @@ pub fn raw_deposit(
             pair_addr: p.farmer_addr,   //not used on raw withdraw
             aim_collateral_ratio: Decimal::default(),   // not used on raw withdraw
         })?;
-        anc_deposit_stable(config, deposit_amount)
+
+        let deposited_coin_without_taxes = deduct_tax(deps.as_ref(), Coin {
+            denom: config.stable_denom.clone(),
+            amount: deposit_amount.into(),
+        })?;
+
+        anc_deposit_stable(config.anchor_market_contract,deposited_coin_without_taxes)
     } else {
         return Err(StdError::generic_err(format!(
             "There isn't position: farmer_addr: {}, masset_token: {}. To create new position provide 'leverage'",
@@ -178,8 +189,8 @@ pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_coll
             return Err(StdError::generic_err(format!("aim_collateral_ratio lower than safe_collateral_ratio: {}", &safe_collateral_ratio)));
         };
 
-        let mirror_mint_config = query_mirror_mint_config(deps.as_ref(), config.mirror_mint_contract.to_string())?;
-        let (collateral_price, masset_price) = get_assets_prices(deps.as_ref(), &mirror_mint_config, &config, &masset_token)?;
+        let mirror_mint_info = query_mirror_mint_info(deps.as_ref(), config.mirror_mint_contract.to_string())?;
+        let (collateral_price, masset_price) = get_assets_prices(deps.as_ref(), &mirror_mint_info, &config, &masset_token)?;
         let masset_price_in_collateral_asset = decimal_division(collateral_price, masset_price)?;
         let loan_in_collateral_asset = position.loan * masset_price_in_collateral_asset;
         let current_collateral_ratio = Decimal::from_ratio(position.collateral, loan_in_collateral_asset);
@@ -190,7 +201,7 @@ pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_coll
         let aim_loan_in_collateral_asset = Uint128::from(aim_collateral.u128() * aim_collateral_ratio.denominator() / aim_collateral_ratio.numerator());
         let aim_loan = Uint128::from(aim_loan_in_collateral_asset.u128() * masset_price_in_collateral_asset.denominator() / masset_price_in_collateral_asset.numerator());
 
-        let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &deps.api.addr_humanize(&mirror_mint_config.terraswap_factory)?, &masset_token)?)?;
+        let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &mirror_mint_info.terraswap_factory, &masset_token)?)?;
 
         save_withdraw_state(deps.storage, &WithdrawState {
             farmer_addr: position.farmer_addr,
@@ -220,9 +231,9 @@ pub fn raw_withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, amou
             return Err(StdError::generic_err("Not enough asset in collateral"));
         };
         let config = load_config(deps.storage)?;
-        let mirror_mint_config = query_mirror_mint_config(deps.as_ref(), config.mirror_mint_contract.to_string())?;
+        let mirror_mint_info = query_mirror_mint_info(deps.as_ref(), config.mirror_mint_contract.to_string())?;
 
-        let (collateral_price, masset_price) = get_assets_prices(deps.as_ref(), &mirror_mint_config, &config, &masset_token)?;
+        let (collateral_price, masset_price) = get_assets_prices(deps.as_ref(), &mirror_mint_info, &config, &masset_token)?;
         let masset_price_in_collateral_asset = decimal_division(collateral_price, masset_price)?;
 
         let masset_config = query_masset_config(deps.as_ref(), &masset_token)?;
@@ -233,7 +244,7 @@ pub fn raw_withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, amou
             return Err(StdError::generic_err("Amount to withdraw too big for raw withdraw"));
         };
 
-        let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &deps.api.addr_humanize(&mirror_mint_config.terraswap_factory)?, &masset_token)?)?;
+        let pair_addr = deps.api.addr_validate(&query_pair_addr(deps.as_ref(), &mirror_mint_info.terraswap_factory, &masset_token)?)?;
 
         save_withdraw_state(deps.storage, &WithdrawState {
             farmer_addr: position.farmer_addr,
