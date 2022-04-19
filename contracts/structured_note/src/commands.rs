@@ -3,7 +3,7 @@ use cosmwasm_std::{BalanceResponse, BankMsg, BankQuery, Coin, CosmosMsg, Decimal
 
 use structured_note_package::mirror::MirrorAssetConfigResponse;
 
-use crate::anchor::deposit_stable as anc_deposit_stable;
+use crate::anchor::deposit_stable_to_anc;
 use crate::mirror::{get_assets_prices, query_masset_config, query_mirror_mint_info, withdraw_collateral};
 use crate::state::{add_farmer_to_cdp, DepositState, load_config, load_position, load_withdraw_state, may_load_cdp, may_load_position, Position, remove_farmer_from_cdp, remove_position, save_deposit_state, save_is_open, save_is_raw, save_position, save_withdraw_state, update_is_open, WithdrawState};
 use crate::terraswap::query_pair_addr;
@@ -100,7 +100,7 @@ pub fn deposit(
         amount: deposit_amount.into(),
     })?;
 
-    anc_deposit_stable(config.anchor_market_contract,deposited_coin_without_taxes)
+    deposit_stable_to_anc(config.anchor_market_contract,deposited_coin_without_taxes)
 }
 
 pub fn raw_deposit(
@@ -144,7 +144,7 @@ pub fn raw_deposit(
             amount: deposit_amount.into(),
         })?;
 
-        anc_deposit_stable(config.anchor_market_contract,deposited_coin_without_taxes)
+        deposit_stable_to_anc(config.anchor_market_contract,deposited_coin_without_taxes)
     } else {
         return Err(StdError::generic_err(format!(
             "There isn't position: farmer_addr: {}, masset_token: {}. To create new position provide 'leverage'",

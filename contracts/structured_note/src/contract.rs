@@ -1,17 +1,17 @@
 use std::convert::TryFrom;
 use std::str::FromStr;
 
-use cosmwasm_std::{Binary, ContractResult, Deps, DepsMut, entry_point, Env, Fraction, MessageInfo, Reply, Response, StdError, StdResult, to_binary, Uint128};
+use cosmwasm_std::{Binary, Coin, ContractResult, Deps, DepsMut, entry_point, Env, Fraction, MessageInfo, Reply, Response, StdError, StdResult, to_binary, Uint128};
 
 use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
-use crate::anchor::redeem_stable;
+use crate::anchor::{redeem_stable, deposit_stable_to_anc};
 use crate::commands::{calculate_withdraw_amount, deposit, exit, is_aim_state, raw_deposit, raw_withdraw, return_stable, withdraw};
 use crate::mirror::{burn_masset, deposit_to_cdp, mint_masset, open_cdp, withdraw_collateral};
-use crate::state::{add_farmer_to_cdp, Config, decrease_position_collateral, decrease_position_loan, increase_iteration_index, increase_position_collateral, increase_position_loan, load_cdp, load_config, load_deposit_state, load_is_open, load_is_raw, load_position, load_positions_by_farmer_addr, load_withdraw_state, may_load_position, Position, save_config, save_position};
+use crate::state::{add_farmer_to_cdp, Config, decrease_position_collateral, decrease_position_loan, increase_iteration_index, increase_position_collateral, increase_position_loan, load_cdp, load_config, load_deposit_state, load_is_open, load_is_raw, load_position, load_positions_by_farmer_addr, load_withdraw_state, may_load_position, Position, save_config, save_position, update_is_open};
 use crate::SubmsgIds;
 use crate::terraswap::{buy_masset, sell_masset};
-use crate::utils::{decimal_division, decimal_multiplication, get_amount_from_response_asset_as_string_attr, get_amount_from_response_raw_attr, query_balance};
+use crate::utils::{decimal_division, decimal_multiplication, deduct_tax, get_amount_from_response_asset_as_string_attr, get_amount_from_response_raw_attr, query_balance};
 
 #[entry_point]
 pub fn instantiate(
@@ -67,7 +67,7 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
 
     let submessage_enum = SubmsgIds::try_from(msg.id)?;
     match submessage_enum {
-        SubmsgIds::DepositStable => {
+        SubmsgIds::DepositStableToAnc => {
             let received_aterra_amount = Uint128::from_str(&get_amount_from_response_raw_attr(events, "mint_amount".to_string())?)?;
             let config = load_config(deps.storage)?;
             let state = load_deposit_state(deps.storage)?;
@@ -79,6 +79,7 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
             }
         }
         SubmsgIds::OpenCDP => {
+            update_is_open(deps.storage, false)?;
             let state = increase_iteration_index(deps.storage)?;
             let cdp_idx = Uint128::from_str(&get_amount_from_response_raw_attr(events.clone(), "position_idx".to_string())?)?;
             let minted_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events.clone(), "mint_amount".to_string())?)?;
@@ -116,11 +117,15 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
             mint_masset(config, position.cdp_idx, state.masset_token.to_string(), mint_amount)
         }
         SubmsgIds::SellMAsset => {
-            let received_aterra_amount = Uint128::from_str(&get_amount_from_response_raw_attr(events, "mint_amount".to_string())?)?;
+            let return_amount = Uint128::from_str(&get_amount_from_response_raw_attr(events, "return_amount".to_string())?)?;
             let config = load_config(deps.storage)?;
-            let state = load_deposit_state(deps.storage)?;
-            let position = load_position(deps.storage, &state.farmer_addr, &state.masset_token)?;
-            deposit_to_cdp(config, position.cdp_idx, received_aterra_amount)
+
+            let return_amount_without_taxes = deduct_tax(deps.as_ref(), Coin {
+                denom: config.stable_denom.clone(),
+                amount: return_amount.into(),
+            })?;
+
+            deposit_stable_to_anc(config.anchor_market_contract, return_amount_without_taxes)
         }
         SubmsgIds::MintMAsset => {
             let state = load_deposit_state(deps.storage)?;

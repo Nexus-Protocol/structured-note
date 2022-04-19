@@ -12,7 +12,7 @@ mod utils;
 
 pub enum SubmsgIds {
     //Deposit
-    DepositStable,
+    DepositStableToAnc,
     OpenCDP,
     DepositToCDP,
     MintMAsset,
@@ -30,7 +30,7 @@ impl TryFrom<u64> for SubmsgIds {
 
     fn try_from(v: u64) -> Result<Self, Self::Error> {
         match v {
-            x if x == SubmsgIds::DepositStable.id() => Ok(SubmsgIds::DepositStable),
+            x if x == SubmsgIds::DepositStableToAnc.id() => Ok(SubmsgIds::DepositStableToAnc),
             x if x == SubmsgIds::OpenCDP.id() => Ok(SubmsgIds::OpenCDP),
             x if x == SubmsgIds::DepositToCDP.id() => Ok(SubmsgIds::DepositToCDP),
             x if x == SubmsgIds::MintMAsset.id() => Ok(SubmsgIds::MintMAsset),
@@ -51,7 +51,7 @@ impl TryFrom<u64> for SubmsgIds {
 impl SubmsgIds {
     pub const fn id(&self) -> u64 {
         match self {
-            SubmsgIds::DepositStable => 0,
+            SubmsgIds::DepositStableToAnc => 0,
             SubmsgIds::OpenCDP => 1,
             SubmsgIds::DepositToCDP => 2,
             SubmsgIds::MintMAsset => 3,

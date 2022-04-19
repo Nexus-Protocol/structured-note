@@ -6,13 +6,13 @@ use structured_note_package::anchor::{AnchorCW20HookMsg, AnchorMarketMsg};
 use crate::state::Config;
 use crate::SubmsgIds;
 
-pub fn deposit_stable(anchor_market_contract: Addr, coin : Coin) -> StdResult<Response> {
+pub fn deposit_stable_to_anc(anchor_market_contract: Addr, coin : Coin) -> StdResult<Response> {
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: anchor_market_contract.to_string(),
             msg: to_binary(&AnchorMarketMsg::DepositStable {})?,
             funds: vec![coin.clone()],
-        }), SubmsgIds::DepositStable.id(),
+        }), SubmsgIds::DepositStableToAnc.id(),
         ))
         .add_attributes(vec![
             ("action", "deposit_stable_to_anchor_market"),
