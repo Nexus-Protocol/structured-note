@@ -70,7 +70,7 @@ pub fn get_amount_from_asset_as_string(data: &str) -> Option<String> {
 pub fn query_balance(
     querier: &QuerierWrapper,
     account_addr: &Addr,
-    denom: &String,
+    denom: &str,
 ) -> StdResult<Uint128> {
     let balance: BalanceResponse = querier.query(&QueryRequest::Bank(BankQuery::Balance {
         address: account_addr.to_string(),
@@ -79,21 +79,30 @@ pub fn query_balance(
     Ok(balance.amount.amount)
 }
 
-pub fn compute_tax(deps: Deps, coin: &Coin) -> StdResult<Uint256> {
+pub fn get_taxed(deps: Deps, denom: &str, amount: Uint256) -> StdResult<Uint256> {
     let terra_querier = TerraQuerier::new(&deps.querier);
-    let tax_rate = Decimal256::from((terra_querier.query_tax_rate()?).rate);
-    let tax_cap = Uint256::from((terra_querier.query_tax_cap(coin.denom.to_string())?).cap);
-    let amount = Uint256::from(coin.amount);
-    Ok(std::cmp::min(
-        amount * Decimal256::one() - amount / (Decimal256::one() + tax_rate),
-        tax_cap,
-    ))
+    let rate = Decimal256::from((terra_querier.query_tax_rate()?).rate);
+    let cap = Uint256::from((terra_querier.query_tax_cap(denom)?).cap);
+
+    let tax = if amount.is_zero() {
+        Uint256::zero()
+    } else {
+        let rate_part = Decimal256::one() - Decimal256::one() / (Decimal256::one() + rate);
+        ceiled_mul_uint_decimal(amount, rate_part)
+    };
+
+    let tax_capped = std::cmp::min(tax, cap);
+    Ok(amount - std::cmp::max(tax_capped, Uint256::one()))
 }
 
-pub fn deduct_tax(deps: Deps, coin: Coin) -> StdResult<Coin> {
-    let tax_amount = compute_tax(deps, &coin)?;
-    Ok(Coin {
-        denom: coin.denom,
-        amount: (Uint256::from(coin.amount) - tax_amount).into(),
-    })
+fn ceiled_mul_uint_decimal(a: Uint256, b: Decimal256) -> Uint256 {
+    let decimal_output = Decimal256::from_uint256(a) * b;
+    let floored_output = Uint256::from(decimal_output.0 / Decimal256::DECIMAL_FRACTIONAL);
+
+    // Check for rounding error
+    if decimal_output != Decimal256::from_uint256(floored_output) {
+        floored_output + Uint256::one()
+    } else {
+        floored_output
+    }
 }

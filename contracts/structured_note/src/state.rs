@@ -280,13 +280,6 @@ pub fn load_is_open(storage: &dyn Storage) -> StdResult<bool> {
     KEY_IS_OPEN.load(storage)
 }
 
-pub fn update_is_open(storage: &mut dyn Storage, data: bool) -> StdResult<bool> {
-    KEY_IS_OPEN.update(storage, |mut is_open: bool| -> StdResult<_> {
-        is_open = data;
-        Ok(is_open)
-    })
-}
-
 pub fn save_is_raw(storage: &mut dyn Storage, is_open: bool) -> StdResult<()> {
     KEY_IS_RAW.save(storage, &is_open)
 }
