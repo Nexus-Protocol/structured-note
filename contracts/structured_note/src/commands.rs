@@ -1,5 +1,5 @@
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{BalanceResponse, BankMsg, BankQuery, Coin, CosmosMsg, Decimal, DepsMut, Env, Fraction, MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128};
+use cosmwasm_std::{attr, BalanceResponse, BankMsg, BankQuery, Coin, CosmosMsg, Decimal, DepsMut, Env, Fraction, MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128};
 
 use structured_note_package::mirror::MirrorAssetConfigResponse;
 
@@ -185,7 +185,7 @@ pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_coll
 
         let config = load_config(deps.storage)?;
         let masset_config = query_masset_config(deps.as_ref(), &masset_token)?;
-        let safe_collateral_ratio = decimal_multiplication(&masset_config.min_collateral_ratio, &config.min_over_collateralization);
+        let safe_collateral_ratio = decimal_multiplication(&masset_config.min_collateral_ratio, &(Decimal::one() + config.min_over_collateralization));
         if aim_collateral_ratio < safe_collateral_ratio {
             return Err(StdError::generic_err(format!("aim_collateral_ratio lower than safe_collateral_ratio: {}", &safe_collateral_ratio)));
         };
@@ -236,9 +236,9 @@ pub fn raw_withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, amou
         let masset_price_in_collateral_asset = decimal_division(collateral_price, masset_price)?;
 
         let masset_config = query_masset_config(deps.as_ref(), &masset_token)?;
-        let safe_collateral_ratio = decimal_multiplication(&masset_config.min_collateral_ratio, &config.min_over_collateralization);
+        let safe_collateral_ratio = decimal_multiplication(&masset_config.min_collateral_ratio, &(Decimal::one() + config.min_over_collateralization));
         let loan_in_collateral_asset = position.loan * masset_price_in_collateral_asset;
-        let min_safe_collateral = Uint128::from(loan_in_collateral_asset.u128() * safe_collateral_ratio.denominator() / safe_collateral_ratio.numerator());
+        let min_safe_collateral = loan_in_collateral_asset * safe_collateral_ratio;
         if position.collateral - amount < min_safe_collateral {
             return Err(StdError::generic_err("Amount to withdraw too big for raw withdraw"));
         };
