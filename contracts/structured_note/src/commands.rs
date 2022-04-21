@@ -134,9 +134,9 @@ pub fn raw_deposit(
             masset_token: p.masset_token,
             leverage: p.leverage,
             cur_iteration_index: 0,
-            asset_price_in_collateral_asset: Decimal::default(),    //not used on raw withdraw
-            pair_addr: p.farmer_addr,   //not used on raw withdraw
-            aim_collateral_ratio: Decimal::default(),   // not used on raw withdraw
+            asset_price_in_collateral_asset: Decimal::default(),    //not used on raw deposit
+            pair_addr: p.farmer_addr,   //not used on raw deposit
+            aim_collateral_ratio: Decimal::default(),   // not used on raw deposit
         })?;
 
         let deposited_coin_without_taxes = Coin {
@@ -175,6 +175,7 @@ pub fn exit(position: Position) -> StdResult<Response> {
 }
 
 pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_collateral: Uint128, aim_collateral_ratio: Decimal) -> StdResult<Response> {
+    save_is_raw(deps.storage, false)?;
     let masset_token = deps.api.addr_validate(&masset_token)?;
 
     if let Some(position) = may_load_position(deps.storage, &info.sender, &masset_token)? {
@@ -224,12 +225,10 @@ pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_coll
 }
 
 pub fn raw_withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, amount: Uint128) -> StdResult<Response> {
+    save_is_raw(deps.storage, true)?;
     let masset_token = deps.api.addr_validate(&masset_token)?;
 
     if let Some(position) = may_load_position(deps.storage, &info.sender, &masset_token)? {
-        if position.collateral < amount {
-            return Err(StdError::generic_err("Not enough asset in collateral"));
-        };
         let config = load_config(deps.storage)?;
         let mirror_mint_info = query_mirror_mint_info(deps.as_ref(), config.mirror_mint_contract.to_string())?;
 
