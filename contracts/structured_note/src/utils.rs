@@ -1,5 +1,5 @@
 use cosmwasm_bignumber::{Decimal256, Uint256};
-use cosmwasm_std::{Addr, BalanceResponse, BankQuery, Coin, Decimal, Deps, Event, QuerierWrapper, QueryRequest, StdError, StdResult, Uint128};
+use cosmwasm_std::{Addr, BalanceResponse, BankQuery, Decimal, Deps, Event, QuerierWrapper, QueryRequest, StdError, StdResult, Uint128};
 use terra_cosmwasm::TerraQuerier;
 
 // Math

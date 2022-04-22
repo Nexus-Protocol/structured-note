@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 static KEY_CONFIG: Item<Config> = Item::new("config");
 static KEY_DEPOSIT_STATE: Item<DepositState> = Item::new("deposit_state");
 static KEY_WITHDRAW_STATE: Item<WithdrawState> = Item::new("withdraw_state");
+static KEY_WITHDRAW_AMOUNT: Item<Uint128> = Item::new("withdraw_amount");
 // Map<cdp.masset_token, CDP>
 static KEY_CDPS: Map<&Addr, CDP> = Map::new("cdps");
 // Map<(position.farmer_addr, position.masset_token), Position>
@@ -286,4 +287,17 @@ pub fn save_is_raw(storage: &mut dyn Storage, is_open: bool) -> StdResult<()> {
 
 pub fn load_is_raw(storage: &dyn Storage) -> StdResult<bool> {
     KEY_IS_RAW.load(storage)
+}
+
+pub fn upsert_withdraw_amount(storage: &mut dyn Storage, amount: Uint128) -> StdResult<Uint128> {
+    match KEY_WITHDRAW_AMOUNT.may_load(storage)? {
+        Some(value) => KEY_WITHDRAW_AMOUNT.update(storage, |mut value| -> StdResult<Uint128> {
+            value += amount;
+            Ok(value)
+        }),
+        None => {
+            KEY_WITHDRAW_AMOUNT.save(storage, &amount)?;
+            Ok(amount)
+        }
+    }
 }
