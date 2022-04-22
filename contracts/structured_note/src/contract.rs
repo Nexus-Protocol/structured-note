@@ -8,10 +8,10 @@ use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, Query
 use crate::anchor::{deposit_stable_to_anc, redeem_stable};
 use crate::commands::{calculate_withdraw_amount, deposit, exit, is_aim_state, raw_deposit, raw_withdraw, return_stable, withdraw};
 use crate::mirror::{burn_masset, deposit_to_cdp, mint_masset, open_cdp, withdraw_collateral};
-use crate::state::{add_farmer_to_cdp, Config, decrease_position_collateral, decrease_position_loan, increase_iteration_index, increase_position_collateral, increase_position_loan, load_cdp, load_config, load_deposit_state, load_is_open, load_is_raw, load_position, load_positions_by_farmer_addr, load_withdraw_amount, load_withdraw_state, may_load_position, Position, save_config, save_is_open, save_position, upsert_withdraw_amount};
+use crate::state::{add_farmer_to_cdp, Config, decrease_position_collateral, decrease_position_loan, decrease_withdraw_amount, increase_iteration_index, increase_position_collateral, increase_position_loan, load_cdp, load_config, load_deposit_state, load_is_open, load_is_raw, load_position, load_positions_by_farmer_addr, load_withdraw_amount, load_withdraw_state, may_load_position, Position, save_config, save_is_open, save_position, upsert_withdraw_amount};
 use crate::SubmsgIds;
 use crate::terraswap::{buy_masset, sell_masset};
-use crate::utils::{decimal_division, decimal_multiplication, get_amount_from_response_asset_as_string_attr, get_amount_from_response_raw_attr, get_taxed, query_balance};
+use crate::utils::{decimal_division, decimal_multiplication, get_amount_from_response_asset_as_string_attr, get_amount_from_response_raw_attr, get_taxed};
 
 #[entry_point]
 pub fn instantiate(
@@ -147,26 +147,27 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
             redeem_stable(load_config(deps.storage)?, received_aterra_amount)
         }
         SubmsgIds::RedeemStable => {
-            let redeem_amount = Uint128::from_str(&get_amount_from_response_raw_attr(events.clone(), "redeem_amount".to_string())?)?;
             let state = load_withdraw_state(deps.storage)?;
             let config = load_config(deps.storage)?;
-            let stable_to_withdraw_amount = upsert_withdraw_amount(deps.storage, redeem_amount)?;
+            let redeem_amount = get_taxed(
+                deps.as_ref(),
+                &config.stable_denom,
+                Uint128::from_str(&get_amount_from_response_raw_attr(events.clone(), "redeem_amount".to_string())?)?.into())?;
+            let stable_to_withdraw_amount = upsert_withdraw_amount(deps.storage, redeem_amount.into())?;
             let stable_to_withdraw_without_taxes = Coin {
                 denom: config.stable_denom.clone(),
-                amount: get_taxed(deps.as_ref(), &config.stable_denom, stable_to_withdraw_amount.into())?.into()
+                amount: get_taxed(deps.as_ref(), &config.stable_denom, stable_to_withdraw_amount.into())?.into(),
             };
             if load_is_raw(deps.storage)? {
-                return return_stable(deps, stable_to_withdraw_without_taxes);
-            };
+                return return_stable(deps, stable_to_withdraw_without_taxes)
+            }
             if let Some(position) = may_load_position(deps.storage, &state.farmer_addr, &state.masset_token)? {
                 if is_aim_state(&position, &state) {
                     return return_stable(deps, stable_to_withdraw_without_taxes);
                 };
-
                 let repay_to_aim_value = (position.loan - state.aim_loan) * state.masset_price;
-                let stable_balance = query_balance(&deps.querier, &env.contract.address, &config.stable_denom)?;
-
-                let offer_amount = stable_balance.min(repay_to_aim_value);
+                let offer_amount = stable_to_withdraw_amount.min(repay_to_aim_value);
+                decrease_withdraw_amount(deps.storage, offer_amount)?;
                 buy_masset(config, state, env.contract.address.to_string(), offer_amount)
             } else {
                 Err(StdError::generic_err(format!(
