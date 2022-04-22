@@ -301,3 +301,7 @@ pub fn upsert_withdraw_amount(storage: &mut dyn Storage, amount: Uint128) -> Std
         }
     }
 }
+
+pub fn load_withdraw_amount(storage: &dyn Storage) -> StdResult<Uint128> {
+    KEY_WITHDRAW_AMOUNT.load(storage)
+}

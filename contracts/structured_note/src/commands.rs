@@ -279,29 +279,20 @@ pub fn calculate_withdraw_amount(collateral: Uint128, loan: Uint128, aim_collate
     }
 }
 
-pub fn return_stable(deps: DepsMut, env: Env) -> StdResult<Response> {
+pub fn return_stable(deps: DepsMut, stable_to_withdraw :Coin) -> StdResult<Response> {
     let state = load_withdraw_state(deps.storage)?;
     let position = load_position(deps.storage, &state.farmer_addr, &state.masset_token)?;
-    let config = load_config(deps.storage)?;
     if position.collateral == Uint128::zero() {
         remove_position(deps.storage, &position.farmer_addr, &position.masset_token);
         remove_farmer_from_cdp(deps.storage, &position.farmer_addr, &position.masset_token)?;
     };
-    let balance: BalanceResponse = deps.querier.query(&QueryRequest::Bank(BankQuery::Balance {
-        address: env.contract.address.to_string(),
-        denom: config.stable_denom.clone(),
-    }))?;
     Ok(Response::new()
         .add_message(CosmosMsg::Bank(BankMsg::Send {
             to_address: position.farmer_addr.to_string(),
-            amount: vec![
-                Coin {
-                    denom: config.stable_denom,
-                    amount: balance.amount.amount,
-                }],
+            amount: vec![stable_to_withdraw.clone()],
         }))
         .add_attributes(vec![
             ("action", "return_stable"),
-            ("return_amount", &balance.amount.amount.to_string()),
+            ("return_amount", &stable_to_withdraw.amount.to_string()),
         ]))
 }
