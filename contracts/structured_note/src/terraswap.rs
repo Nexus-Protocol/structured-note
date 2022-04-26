@@ -5,7 +5,7 @@ use terraswap::pair::Cw20HookMsg::Swap as Cw20HookSwap;
 use terraswap::pair::ExecuteMsg::Swap;
 use terraswap::querier::query_pair_info;
 
-use crate::state::{Config, DepositState, load_config, WithdrawState};
+use crate::state::{DepositState, load_config};
 use crate::SubmsgIds;
 
 pub fn query_pair_addr(deps: Deps, terraswap_factory_addr: &Addr, masset_token: &Addr) -> StdResult<String> {
@@ -50,29 +50,25 @@ pub fn sell_masset(env: Env, state: &DepositState, minted_amount: Uint128) -> St
         ]))
 }
 
-pub fn buy_masset(config: Config, state: WithdrawState, contract_addr: String, offer_amount: Uint128) -> StdResult<Response> {
-    let offer_asset = Coin {
-        denom: config.stable_denom.clone(),
-        amount: offer_amount,
-    };
+pub fn buy_masset(pair_addr: String, contract_addr: String, coin: Coin) -> StdResult<Response> {
     Ok(Response::new()
         .add_submessage(SubMsg::reply_on_success(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: state.pair_addr.to_string(),
+            contract_addr: pair_addr,
             msg: to_binary(&Swap {
                 offer_asset: Asset {
                     info: AssetInfo::NativeToken {
-                        denom: config.stable_denom,
+                        denom: coin.denom.clone(),
                     },
-                    amount: offer_amount,
+                    amount: coin.amount.clone(),
                 },
                 belief_price: None,
                 max_spread: None,
                 to: Some(contract_addr),
             })?,
-            funds: vec![offer_asset],
+            funds: vec![coin.clone()],
         }), SubmsgIds::BuyMAsset.id()))
         .add_attributes(vec![
             ("action", "buy_masset"),
-            ("offered_amount", &offer_amount.to_string()),
+            ("offered_amount", &coin.amount.to_string()),
         ]))
 }

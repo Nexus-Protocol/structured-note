@@ -1,5 +1,5 @@
 use cosmwasm_bignumber::Uint256;
-use cosmwasm_std::{attr, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, Fraction, MessageInfo, Response, StdError, StdResult, Uint128};
+use cosmwasm_std::{BankMsg, Coin, CosmosMsg, Decimal, DepsMut, Fraction, MessageInfo, Response, StdError, StdResult, Uint128};
 
 use structured_note_package::mirror::MirrorAssetConfigResponse;
 
@@ -265,7 +265,7 @@ pub fn raw_withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, amou
 }
 
 pub fn is_aim_state(position: &Position, state: &WithdrawState) -> bool {
-    position.collateral == state.aim_collateral && position.loan == state.aim_loan
+    position.collateral == state.aim_collateral && position.loan <= state.aim_loan
 }
 
 pub fn calculate_withdraw_amount(collateral: Uint128, loan: Uint128, aim_collateral: Uint128, masset_price_in_collateral_asset: Decimal, safe_collateral_ratio: Decimal) -> Uint128 {

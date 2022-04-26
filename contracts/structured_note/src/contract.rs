@@ -165,10 +165,14 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
                 if is_aim_state(&position, &state) {
                     return return_stable(deps, stable_to_withdraw_without_taxes);
                 };
-                let repay_to_aim_value = (position.loan - state.aim_loan) * state.masset_price;
-                let offer_amount = stable_to_withdraw_amount.min(repay_to_aim_value);
+                let repay_to_aim_loan = (position.loan - state.aim_loan) * state.masset_price;
+                let offer_amount = stable_to_withdraw_amount.min(repay_to_aim_loan);
                 decrease_withdraw_amount(deps.storage, offer_amount)?;
-                buy_masset(config, state, env.contract.address.to_string(), offer_amount)
+                let offer_stable = Coin {
+                    denom: config.stable_denom.clone(),
+                    amount: get_taxed(deps.as_ref(), &config.stable_denom, offer_amount.into())?.into(),
+                };
+                buy_masset(state.pair_addr.to_string(), env.contract.address.to_string(), offer_stable)
             } else {
                 Err(StdError::generic_err(format!(
                     "There isn't position: farmer_addr: {}, masset_token: {}.",
