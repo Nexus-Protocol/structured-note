@@ -55,6 +55,7 @@ pub struct WithdrawState {
     pub collateral_price: Decimal,
     pub masset_price: Decimal,
     pub safe_collateral_ratio: Decimal,
+    pub mirror_protocol_fee: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

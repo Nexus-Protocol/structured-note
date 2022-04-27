@@ -189,14 +189,20 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
         SubmsgIds::BurnMAsset => {
             let state = load_withdraw_state(deps.storage)?;
             let burn_amount = Uint128::from_str(&get_amount_from_response_asset_as_string_attr(events, "burn_amount".to_string())?)?;
-            let position = decrease_position_loan(deps.storage, &state.farmer_addr, &state.masset_token, burn_amount)?;
+            decrease_position_loan(deps.storage, &state.farmer_addr, &state.masset_token, burn_amount)?;
             let state = load_withdraw_state(deps.storage)?;
             let config = load_config(deps.storage)?;
+
+            //mirror protocol fee
+            let collateral_price_in_asset = state.masset_price * Uint128::from(state.collateral_price.denominator() / state.collateral_price.numerator());
+            let mirror_protocol_fee_amount = collateral_price_in_asset * burn_amount * state.mirror_protocol_fee;
+            let position = decrease_position_collateral(deps.storage, &state.farmer_addr, &state.masset_token, mirror_protocol_fee_amount)?;
+
             if is_aim_state(&position, &state) {
                 let stable_to_withdraw_amount = load_withdraw_amount(deps.storage)?;
                 let stable_to_withdraw_without_taxes = Coin {
                     denom: config.stable_denom.clone(),
-                    amount: get_taxed(deps.as_ref(), &config.stable_denom, stable_to_withdraw_amount.into())?.into()
+                    amount: get_taxed(deps.as_ref(), &config.stable_denom, stable_to_withdraw_amount.into())?.into(),
                 };
                 return return_stable(deps, stable_to_withdraw_without_taxes);
             };

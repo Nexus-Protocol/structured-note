@@ -60,7 +60,7 @@ pub struct MirrorMintInfo {
     // pub lock: Addr,
     // pub base_denom: String,
     // pub token_code_id: u64,
-    // pub protocol_fee_rate: Decimal,
+    pub protocol_fee_rate: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

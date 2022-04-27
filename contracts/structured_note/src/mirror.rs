@@ -17,10 +17,11 @@ pub fn query_mirror_mint_info(deps: Deps, mirror_mint_contract: String) -> StdRe
         }))?;
     Ok(
         MirrorMintInfo{
-                oracle: deps.api.addr_humanize(&res.oracle)?,
-                collateral_oracle: deps.api.addr_humanize(&res.collateral_oracle)?,
-                terraswap_factory: deps.api.addr_humanize(&res. terraswap_factory)?,
-            })
+            oracle: deps.api.addr_humanize(&res.oracle)?,
+            collateral_oracle: deps.api.addr_humanize(&res.collateral_oracle)?,
+            terraswap_factory: deps.api.addr_humanize(&res.terraswap_factory)?,
+            protocol_fee_rate: res.protocol_fee_rate,
+        })
 }
 
 pub fn query_masset_config(deps: Deps, masset_token: &Addr) -> StdResult<MirrorAssetConfigResponse> {

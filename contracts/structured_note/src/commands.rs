@@ -213,6 +213,7 @@ pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_coll
             collateral_price,
             masset_price,
             safe_collateral_ratio,
+            mirror_protocol_fee: mirror_mint_info.protocol_fee_rate,
         })?;
         let amount_to_withdraw = calculate_withdraw_amount(position.collateral, position.loan, aim_collateral, masset_price_in_collateral_asset, safe_collateral_ratio);
         withdraw_collateral(config, position.cdp_idx, amount_to_withdraw)
@@ -254,6 +255,7 @@ pub fn raw_withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, amou
             collateral_price,
             masset_price,
             safe_collateral_ratio,
+            mirror_protocol_fee: Decimal::default(), // not used in raw withdraw
         })?;
         withdraw_collateral(config, position.cdp_idx, amount)
     } else {
