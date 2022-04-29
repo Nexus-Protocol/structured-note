@@ -2,6 +2,8 @@ use std::convert::TryFrom;
 use std::str::FromStr;
 
 use cosmwasm_std::{Binary, Coin, ContractResult, Deps, DepsMut, entry_point, Env, Fraction, MessageInfo, Reply, Response, StdError, StdResult, to_binary, Uint128};
+use terraswap::asset::{Asset, AssetInfo};
+use terraswap::querier::reverse_simulate;
 
 use structured_note_package::structured_note::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
@@ -165,8 +167,15 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
                 if is_aim_state(&position, &state) {
                     return return_stable(deps, stable_to_withdraw_without_taxes);
                 };
-                let repay_to_aim_loan = (position.loan - state.aim_loan) * state.masset_price;
-                let offer_amount = stable_to_withdraw_amount.min(repay_to_aim_loan);
+                let repay_to_aim_loan = position.loan - state.aim_loan;
+                let sim_res = reverse_simulate(&deps.querier, state.pair_addr.clone(), &Asset {
+                    info: AssetInfo::Token {
+                        contract_addr: state.masset_token.to_string()
+                    },
+                    amount: repay_to_aim_loan,
+                })?;
+                let required = sim_res.offer_amount + sim_res.commission_amount;
+                let offer_amount = stable_to_withdraw_amount.min(required);
                 decrease_withdraw_amount(deps.storage, offer_amount)?;
                 let offer_stable = Coin {
                     denom: config.stable_denom.clone(),
