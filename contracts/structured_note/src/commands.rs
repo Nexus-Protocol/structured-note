@@ -215,7 +215,20 @@ pub fn withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, aim_coll
             safe_collateral_ratio,
             mirror_protocol_fee: mirror_mint_info.protocol_fee_rate,
         })?;
-        let amount_to_withdraw = calculate_withdraw_amount(position.collateral, position.loan, aim_collateral, masset_price_in_collateral_asset, safe_collateral_ratio);
+        let burn_fee_in_collateral_asset = if aim_loan < position.loan {
+            decimal_multiplication(&masset_price, &mirror_mint_info.protocol_fee_rate)
+        } else {
+            Decimal::zero()
+        };
+        let burn_fee_amount = (position.loan - aim_loan) * burn_fee_in_collateral_asset;
+        let amount_to_withdraw = calculate_withdraw_amount(
+            position.collateral,
+            position.loan,
+            aim_collateral,
+            masset_price_in_collateral_asset,
+            safe_collateral_ratio,
+            burn_fee_amount,
+        );
         withdraw_collateral(config, position.cdp_idx, amount_to_withdraw)
     } else {
         Err(StdError::generic_err(format!(
@@ -267,15 +280,22 @@ pub fn raw_withdraw(deps: DepsMut, info: MessageInfo, masset_token: String, amou
 }
 
 pub fn is_aim_state(position: &Position, state: &WithdrawState) -> bool {
-    position.collateral == state.aim_collateral && position.loan <= state.aim_loan
+    position.collateral <= state.aim_collateral && position.loan <= state.aim_loan
 }
 
-pub fn calculate_withdraw_amount(collateral: Uint128, loan: Uint128, aim_collateral: Uint128, masset_price_in_collateral_asset: Decimal, safe_collateral_ratio: Decimal) -> Uint128 {
+pub fn calculate_withdraw_amount(
+    collateral: Uint128,
+    loan: Uint128,
+    aim_collateral: Uint128,
+    masset_price_in_collateral_asset: Decimal,
+    safe_collateral_ratio: Decimal,
+    burn_fee_amount: Uint128,
+) -> Uint128 {
     let loan_in_collateral_asset = loan * masset_price_in_collateral_asset;
     let min_safe_collateral = loan_in_collateral_asset * safe_collateral_ratio;
     let max_safe_withdraw = collateral - min_safe_collateral;
-    if aim_collateral > min_safe_collateral {
-        collateral - aim_collateral
+    if aim_collateral - burn_fee_amount > min_safe_collateral {
+        collateral - aim_collateral - burn_fee_amount
     } else {
         max_safe_withdraw
     }

@@ -204,8 +204,8 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
 
             //mirror protocol fee
             let collateral_price_in_asset = state.masset_price * Uint128::from(state.collateral_price.denominator() / state.collateral_price.numerator());
-            let mirror_protocol_fee_amount = collateral_price_in_asset * burn_amount * state.mirror_protocol_fee;
-            let position = decrease_position_collateral(deps.storage, &state.farmer_addr, &state.masset_token, mirror_protocol_fee_amount)?;
+            let burn_fee_amount = collateral_price_in_asset * burn_amount * state.mirror_protocol_fee;
+            let position = decrease_position_collateral(deps.storage, &state.farmer_addr, &state.masset_token, burn_fee_amount)?;
 
             if is_aim_state(&position, &state) {
                 let stable_to_withdraw_amount = load_withdraw_amount(deps.storage)?;
@@ -216,7 +216,14 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
                 return return_stable(deps, stable_to_withdraw_without_taxes);
             };
             let masset_price_in_collateral_asset = decimal_division(state.collateral_price, state.masset_price)?;
-            let amount_to_withdraw = calculate_withdraw_amount(position.collateral, position.loan, state.aim_collateral, masset_price_in_collateral_asset, state.safe_collateral_ratio);
+            let amount_to_withdraw = calculate_withdraw_amount(
+                position.collateral,
+                position.loan,
+                state.aim_collateral,
+                masset_price_in_collateral_asset,
+                state.safe_collateral_ratio,
+                burn_fee_amount,
+            );
             withdraw_collateral(config, position.cdp_idx, amount_to_withdraw)
         }
     }
